@@ -4,15 +4,15 @@ import { useRouter } from "next/navigation";
 import { fetchCourse } from "@/lib/course";
 import { clearStoredRound, getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG } from "@/lib/sg";
-import type { Course, Round } from "@/lib/types";
+import type { Round } from "@/lib/types";
 
-function createRound(teeSetId: string): Round {
+function createRound(): Round {
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
     started_at: now,
     updated_at: now,
-    tee_set_id: teeSetId,
+    tee_set_id: "default",
     current_hole: 1,
     events: [],
     sg_total: 0,
@@ -24,7 +24,6 @@ export default function Home() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [round, setRound] = useState<Round | null>(null);
-  const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,12 +40,11 @@ export default function Home() {
     } else {
       setRound(null);
     }
-    fetchCourse().then(setCourse).catch(() => setError("Unable to load course data."));
+    fetchCourse().catch(() => setError("Unable to load course data."));
   }, []);
 
   function handleStartRound() {
-    const teeSetId = course?.tee_sets?.[0]?.id ?? "default";
-    const nextRound = createRound(teeSetId);
+    const nextRound = createRound();
     saveRound(nextRound);
     setRound(nextRound);
     router.push("/hole/1");

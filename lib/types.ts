@@ -3,21 +3,13 @@ export type Coordinate = {
   lng: number;
 };
 
-export type Hole = {
-  hole: number;
+export type HoleGps = {
   tee: Coordinate;
-  green_center: Coordinate;
+  greenCenter: Coordinate;
 };
 
-export type TeeSet = {
-  id: string;
-  name: string;
-  holes: Hole[];
-};
-
-export type Course = {
-  course: string;
-  tee_sets: TeeSet[];
+export type CourseGps = {
+  holes: Record<string, HoleGps>;
 };
 
 export type LieType = "fairway" | "rough" | "sand" | "green" | "penalty";

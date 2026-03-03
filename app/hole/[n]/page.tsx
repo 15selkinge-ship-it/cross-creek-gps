@@ -6,7 +6,7 @@ import { fetchCourse } from "@/lib/course";
 import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG, type SGBaseline } from "@/lib/sg";
-import type { Coordinate, Course, Hole, LieType, Round, SGCategory, ShotEvent, StrokeEvent } from "@/lib/types";
+import type { Coordinate, CourseGps, HoleGps, LieType, Round, SGCategory, ShotEvent, StrokeEvent } from "@/lib/types";
 
 type PositionState = { lat: number; lng: number; accuracy: number };
 const MAX_GPS_ACCURACY_METERS = 100;
@@ -39,11 +39,9 @@ function uid() {
 function formatSG(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
 }
-function findHole(course: Course | null, round: Round | null, n: number): Hole | null {
+function findHole(course: CourseGps | null, n: number): HoleGps | null {
   if (!course) return null;
-  const teeSetId = round?.tee_set_id ?? course.tee_sets[0]?.id;
-  const teeSet = course.tee_sets.find((t) => t.id === teeSetId) ?? course.tee_sets[0];
-  return teeSet?.holes.find((h) => h.hole === n) ?? null;
+  return course.holes[String(n)] ?? null;
 }
 function holeSG(round: Round | null, holeNo: number): number {
   if (!round) return 0;
@@ -69,7 +67,7 @@ export default function HolePage() {
   const holeNumber = Number(params.n);
   const [mounted, setMounted] = useState(false);
   const [geoSupported, setGeoSupported] = useState(false);
-  const [course, setCourse] = useState<Course | null>(null);
+  const [course, setCourse] = useState<CourseGps | null>(null);
   const [round, setRound] = useState<Round | null>(null);
   const [sgBaseline, setSgBaseline] = useState<SGBaseline | null>(null);
   const [position, setPosition] = useState<PositionState | null>(null);
@@ -85,7 +83,7 @@ export default function HolePage() {
   const [puttCount, setPuttCount] = useState(2);
 
   const isValid = Number.isInteger(holeNumber) && holeNumber >= 1 && holeNumber <= 18;
-  const hole = useMemo(() => findHole(course, round, holeNumber), [course, round, holeNumber]);
+  const hole = useMemo(() => findHole(course, holeNumber), [course, holeNumber]);
   const par = isValid ? HOLE_PARS[holeNumber - 1] : 4;
   const hcp = isValid ? HOLE_HCP[holeNumber - 1] : 0;
 
@@ -131,7 +129,7 @@ export default function HolePage() {
       id: uid(),
       started_at: nowIso(),
       updated_at: nowIso(),
-      tee_set_id: course.tee_sets[0]?.id ?? "default",
+      tee_set_id: "default",
       current_hole: holeNumber,
       events: [],
       sg_total: 0,
@@ -159,7 +157,7 @@ export default function HolePage() {
     if (position.accuracy > MAX_GPS_ACCURACY_METERS) return setGpsError("Waiting for accurate GPS fix...");
     const currentCoord = { lat: position.lat, lng: position.lng };
     if (isZeroCoordinate(currentCoord)) return setGpsError("Waiting for accurate GPS fix...");
-    if (isZeroCoordinate(hole.green_center)) return setGpsError("Green center is invalid for this hole.");
+    if (isZeroCoordinate(hole.greenCenter)) return setGpsError("Green center is invalid for this hole.");
     if (!sgBaseline) return setLoadError("SG baseline is still loading. Try again in a moment.");
     const activeRound = ensureRound();
     if (!activeRound) return;
@@ -167,8 +165,8 @@ export default function HolePage() {
     const shotCountOnHole = activeRound.events.filter((e) => e.hole === holeNumber && e.type === "shot").length;
     const eventId = uid();
     const distanceFromPrevYards = safeDistanceYards(startCoord, currentCoord);
-    const startDistanceYards = safeDistanceYards(startCoord, hole.green_center);
-    const endDistanceYards = safeDistanceYards(currentCoord, hole.green_center);
+    const startDistanceYards = safeDistanceYards(startCoord, hole.greenCenter);
+    const endDistanceYards = safeDistanceYards(currentCoord, hole.greenCenter);
     const clampDistance = (value: number | null, label: string): number | undefined => {
       if (value === null) return undefined;
       if (value > MAX_REASONABLE_DISTANCE_YARDS) {
@@ -237,7 +235,7 @@ export default function HolePage() {
 
   const strokesThisHole = round?.events.filter((e) => e.hole === holeNumber).reduce((s, e) => s + e.stroke_value, 0) ?? 0;
   const currentCoord = position ? { lat: position.lat, lng: position.lng } : null;
-  const greenCenter = hole?.green_center ?? null;
+  const greenCenter = hole?.greenCenter ?? null;
   const isAccurateFix = Boolean(position && position.accuracy <= MAX_GPS_ACCURACY_METERS);
   const hasValidCurrentCoord = Boolean(currentCoord && !isZeroCoordinate(currentCoord));
   const hasValidGreenCenter = Boolean(greenCenter && !isZeroCoordinate(greenCenter));
