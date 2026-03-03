@@ -3,7 +3,7 @@ import Link from "next/link";
 import { resolveParByHole } from "@/lib/stats";
 import type { CourseGps, Round, StrokeEvent } from "@/lib/types";
 
-type Props = { round: Round | null; currentHole: number; course?: CourseGps | null; className?: string; };
+type Props = { round: Round | null; currentHole: number; course?: CourseGps | null; className?: string };
 
 type SegmentStat = {
   label: "Out" | "In" | "Tot";
@@ -26,7 +26,7 @@ function isHoleCompleted(events: StrokeEvent[], roundEnded: boolean): boolean {
 }
 
 function formatToPar(value: number | null): string {
-  if (value === null) return "—";
+  if (value === null) return "-";
   if (value === 0) return "E";
   return value > 0 ? `+${value}` : `${value}`;
 }
@@ -135,7 +135,7 @@ export default function ScorecardBar({ round, currentHole, course, className }: 
                       color: strokes > 0 ? scoreCol(strokes, parByHole[hole]) : isCurrent ? "#22c55e" : "#1f3d28",
                     }}
                   >
-                    {strokes > 0 ? strokes : "·"}
+                    {strokes > 0 ? strokes : "."}
                   </span>
                   <span style={{ fontSize: "7px", color: isCurrent ? "#86efac" : "#4ade80", opacity: 0.7 }}>
                     {formatToPar(toParByHole[idx])}
@@ -159,7 +159,7 @@ export default function ScorecardBar({ round, currentHole, course, className }: 
                       color: segment.label === "Tot" ? "#22c55e" : "#f0fdf4",
                     }}
                   >
-                    {segment.strokes > 0 ? segment.strokes : "—"}
+                    {segment.strokes > 0 ? segment.strokes : "-"}
                   </div>
                   <div style={{ fontSize: "7px", color: "#4ade80", opacity: 0.65, whiteSpace: "nowrap" }}>
                     To Par: {formatToPar(segment.toPar)}
