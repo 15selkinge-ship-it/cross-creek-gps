@@ -1,7 +1,7 @@
 import type { Coordinate } from "./types";
 
 const EARTH_RADIUS_METERS = 6371000;
-const METERS_TO_YARDS = 1.0936133;
+const METERS_TO_YARDS = 1.09361;
 const FEET_PER_PACE = 3;
 
 function toRadians(value: number): number {
@@ -33,4 +33,20 @@ export function distanceYards(a: Coordinate, b: Coordinate): number {
 
 export function pacesToFeet(paces: number): number {
   return paces * FEET_PER_PACE;
+}
+
+export function isZeroCoordinate(coord: Coordinate): boolean {
+  return coord.lat === 0 && coord.lng === 0;
+}
+
+export function isFiniteCoordinate(coord: Coordinate): boolean {
+  return Number.isFinite(coord.lat) && Number.isFinite(coord.lng);
+}
+
+export function safeDistanceYards(a: Coordinate, b: Coordinate): number | null {
+  if (!isFiniteCoordinate(a) || !isFiniteCoordinate(b)) return null;
+  if (isZeroCoordinate(a) || isZeroCoordinate(b)) return null;
+  const yards = distanceYards(a, b);
+  if (!Number.isFinite(yards) || yards < 0) return null;
+  return yards;
 }

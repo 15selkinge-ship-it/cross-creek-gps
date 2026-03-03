@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ScorecardBar from "@/components/ScorecardBar";
 import { fetchCourse } from "@/lib/course";
-import { distanceYards, pacesToFeet } from "@/lib/geo";
+import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG, type SGBaseline } from "@/lib/sg";
 import type { Coordinate, Course, Hole, LieType, Round, SGCategory, ShotEvent, StrokeEvent } from "@/lib/types";
 
 type PositionState = { lat: number; lng: number; accuracy: number };
+const MAX_GPS_ACCURACY_METERS = 100;
+const MAX_REASONABLE_DISTANCE_YARDS = 3000;
 
 const HOLE_PARS = [5, 3, 4, 4, 3, 4, 3, 5, 4, 4, 3, 5, 3, 4, 5, 3, 4, 5];
 const HOLE_HCP = [17, 13, 7, 3, 11, 5, 15, 1, 9, 8, 10, 4, 6, 2, 16, 12, 14, 18];
@@ -154,23 +156,38 @@ export default function HolePage() {
 
   function handleLogShot() {
     if (!hole || !position) return setGpsError("Waiting for GPS fix...");
+    if (position.accuracy > MAX_GPS_ACCURACY_METERS) return setGpsError("Waiting for accurate GPS fix...");
+    const currentCoord = { lat: position.lat, lng: position.lng };
+    if (isZeroCoordinate(currentCoord)) return setGpsError("Waiting for accurate GPS fix...");
+    if (isZeroCoordinate(hole.green_center)) return setGpsError("Green center is invalid for this hole.");
     if (!sgBaseline) return setLoadError("SG baseline is still loading. Try again in a moment.");
     const activeRound = ensureRound();
     if (!activeRound) return;
     const startCoord = startCoordinateForShot(activeRound);
     const shotCountOnHole = activeRound.events.filter((e) => e.hole === holeNumber && e.type === "shot").length;
     const eventId = uid();
+    const distanceFromPrevYards = safeDistanceYards(startCoord, currentCoord);
+    const startDistanceYards = safeDistanceYards(startCoord, hole.green_center);
+    const endDistanceYards = safeDistanceYards(currentCoord, hole.green_center);
+    const clampDistance = (value: number | null, label: string): number | undefined => {
+      if (value === null) return undefined;
+      if (value > MAX_REASONABLE_DISTANCE_YARDS) {
+        console.warn(`[gps] Unrealistic ${label}: ${value.toFixed(1)} yards on hole ${holeNumber}.`);
+        return undefined;
+      }
+      return value;
+    };
     const shotEvent: StrokeEvent = {
       id: eventId,
       hole: holeNumber,
       type: "shot",
       stroke_value: 1,
       timestamp: nowIso(),
-      lat: position.lat,
-      lng: position.lng,
-      distance_from_prev_yd: distanceYards(startCoord, { lat: position.lat, lng: position.lng }),
-      start_distance_yds: distanceYards(startCoord, hole.green_center),
-      end_distance_yds: distanceYards({ lat: position.lat, lng: position.lng }, hole.green_center),
+      lat: currentCoord.lat,
+      lng: currentCoord.lng,
+      distance_from_prev_yd: clampDistance(distanceFromPrevYards, "shot distance from previous"),
+      start_distance_yds: clampDistance(startDistanceYards, "start distance"),
+      end_distance_yds: clampDistance(endDistanceYards, "end distance"),
       start_lie: shotCountOnHole === 0 ? "fairway" : startLieForShot(activeRound),
     };
     updateRound({ ...activeRound, current_hole: holeNumber, events: [...activeRound.events, shotEvent] });
@@ -219,12 +236,29 @@ export default function HolePage() {
   }
 
   const strokesThisHole = round?.events.filter((e) => e.hole === holeNumber).reduce((s, e) => s + e.stroke_value, 0) ?? 0;
-  const distYards = hole && position ? Math.round(distanceYards({ lat: position.lat, lng: position.lng }, hole.green_center)) : null;
+  const currentCoord = position ? { lat: position.lat, lng: position.lng } : null;
+  const greenCenter = hole?.green_center ?? null;
+  const isAccurateFix = Boolean(position && position.accuracy <= MAX_GPS_ACCURACY_METERS);
+  const hasValidCurrentCoord = Boolean(currentCoord && !isZeroCoordinate(currentCoord));
+  const hasValidGreenCenter = Boolean(greenCenter && !isZeroCoordinate(greenCenter));
+  const rawDistanceYards = currentCoord && greenCenter && isAccurateFix ? safeDistanceYards(currentCoord, greenCenter) : null;
+  const isUnrealisticDistance = rawDistanceYards !== null && rawDistanceYards > MAX_REASONABLE_DISTANCE_YARDS;
+  const distYards =
+    mounted && isAccurateFix && hasValidCurrentCoord && hasValidGreenCenter && rawDistanceYards !== null && !isUnrealisticDistance
+      ? Math.round(rawDistanceYards)
+      : null;
+  const waitingForAccurateFix = mounted && (!isAccurateFix || !hasValidCurrentCoord);
   const sgTotal = round?.sg_total ?? 0;
   const sgThisHole = holeSG(round, holeNumber);
   const sgPuttingThisHole = holePuttingSG(round, holeNumber);
   const sgRoundByCategory = round?.sg_by_category ?? emptySGTotals();
   const sgHoleByCategory = holeCategorySG(round, holeNumber);
+
+  useEffect(() => {
+    if (isUnrealisticDistance && rawDistanceYards !== null) {
+      console.warn(`[gps] Unrealistic distance to green center: ${rawDistanceYards.toFixed(1)} yards on hole ${holeNumber}.`);
+    }
+  }, [holeNumber, isUnrealisticDistance, rawDistanceYards]);
 
   if (!isValid) return <main><p>Invalid hole number.</p></main>;
 
@@ -241,8 +275,18 @@ export default function HolePage() {
         </div>
         <div className="mt-3 rounded-xl border p-4 text-center" style={{ borderColor: "var(--border)" }}>
           <div>To Pin</div>
-          <div style={{ fontSize: "3rem", fontWeight: 800 }}>{mounted && distYards !== null ? distYards : "-"}</div>
+          <div style={{ fontSize: "3rem", fontWeight: 800 }}>{distYards !== null ? distYards : "--"}</div>
           <div>yards</div>
+          {waitingForAccurateFix && <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Waiting for accurate GPS fix...</div>}
+          {!waitingForAccurateFix && !hasValidGreenCenter && <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Green center coordinates unavailable.</div>}
+        </div>
+        <div className="mt-3 rounded-xl border p-4 text-xs" style={{ borderColor: "var(--border)" }}>
+          <div>GPS Lat: {position ? position.lat.toFixed(6) : "--"}</div>
+          <div>GPS Lng: {position ? position.lng.toFixed(6) : "--"}</div>
+          <div>GPS Accuracy (m): {position ? position.accuracy.toFixed(1) : "--"}</div>
+          <div>Green Center Lat: {greenCenter ? greenCenter.lat.toFixed(6) : "--"}</div>
+          <div>Green Center Lng: {greenCenter ? greenCenter.lng.toFixed(6) : "--"}</div>
+          <div>Computed Distance (yd): {distYards !== null ? distYards : "--"}</div>
         </div>
         <div className="mt-3 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
           <div>This Hole: {strokesThisHole || "-"}</div>
@@ -265,7 +309,7 @@ export default function HolePage() {
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3" style={{ background: "linear-gradient(to top, var(--bg-primary) 70%, transparent)" }}>
         <div className="mx-auto max-w-md">
           <button className="mb-2 h-10 w-full rounded-xl border" style={{ borderColor: "var(--border)" }} onClick={() => router.push("/round-summary")}>Round Summary</button>
-          <button className="h-14 w-full rounded-xl border bg-green-500 text-green-950 disabled:opacity-40" style={{ borderColor: "#22c55e" }} onClick={handleLogShot} disabled={!mounted || !hole || !position || !sgBaseline}>Log Shot Here</button>
+          <button className="h-14 w-full rounded-xl border bg-green-500 text-green-950 disabled:opacity-40" style={{ borderColor: "#22c55e" }} onClick={handleLogShot} disabled={!mounted || !hole || !position || !sgBaseline || !isAccurateFix || !hasValidCurrentCoord || !hasValidGreenCenter}>Log Shot Here</button>
         </div>
       </div>
 
