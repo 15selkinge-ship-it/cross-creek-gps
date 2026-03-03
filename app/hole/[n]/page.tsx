@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import AccuracyPill from "@/components/AccuracyPill";
 import ScorecardBar from "@/components/ScorecardBar";
 import { fetchCourse } from "@/lib/course";
 import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
@@ -72,6 +73,7 @@ export default function HolePage() {
   const [sgBaseline, setSgBaseline] = useState<SGBaseline | null>(null);
   const [position, setPosition] = useState<PositionState | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsPermissionDenied, setGpsPermissionDenied] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lieModalOpen, setLieModalOpen] = useState(false);
@@ -100,9 +102,14 @@ export default function HolePage() {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        setGpsPermissionDenied(false);
         setGpsError(null);
       },
-      () => setGpsError("Could not get location. Tap retry."),
+      (error) => {
+        const denied = error.code === error.PERMISSION_DENIED;
+        setGpsPermissionDenied(denied);
+        setGpsError(denied ? "Location permission denied." : "Could not get location. Tap retry.");
+      },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
     );
     return () => navigator.geolocation.clearWatch(id);
@@ -251,6 +258,8 @@ export default function HolePage() {
   const sgPuttingThisHole = holePuttingSG(round, holeNumber);
   const sgRoundByCategory = round?.sg_by_category ?? emptySGTotals();
   const sgHoleByCategory = holeCategorySG(round, holeNumber);
+  const showGpsDebug = process.env.NEXT_PUBLIC_DEBUG_GPS === "1";
+  const noGps = !geoSupported || gpsPermissionDenied;
 
   useEffect(() => {
     if (isUnrealisticDistance && rawDistanceYards !== null) {
@@ -275,17 +284,20 @@ export default function HolePage() {
           <div>To Pin</div>
           <div style={{ fontSize: "3rem", fontWeight: 800 }}>{distYards !== null ? distYards : "--"}</div>
           <div>yards</div>
+          <AccuracyPill accuracyM={position?.accuracy ?? null} noGps={noGps} />
           {waitingForAccurateFix && <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Waiting for accurate GPS fix...</div>}
           {!waitingForAccurateFix && !hasValidGreenCenter && <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>Green center coordinates unavailable.</div>}
         </div>
-        <div className="mt-3 rounded-xl border p-4 text-xs" style={{ borderColor: "var(--border)" }}>
-          <div>GPS Lat: {position ? position.lat.toFixed(6) : "--"}</div>
-          <div>GPS Lng: {position ? position.lng.toFixed(6) : "--"}</div>
-          <div>GPS Accuracy (m): {position ? position.accuracy.toFixed(1) : "--"}</div>
-          <div>Green Center Lat: {greenCenter ? greenCenter.lat.toFixed(6) : "--"}</div>
-          <div>Green Center Lng: {greenCenter ? greenCenter.lng.toFixed(6) : "--"}</div>
-          <div>Computed Distance (yd): {distYards !== null ? distYards : "--"}</div>
-        </div>
+        {showGpsDebug && (
+          <div className="mt-3 rounded-xl border p-4 text-xs" style={{ borderColor: "var(--border)" }}>
+            <div>GPS Lat: {position ? position.lat.toFixed(6) : "--"}</div>
+            <div>GPS Lng: {position ? position.lng.toFixed(6) : "--"}</div>
+            <div>GPS Accuracy (m): {position ? position.accuracy.toFixed(1) : "--"}</div>
+            <div>Green Center Lat: {greenCenter ? greenCenter.lat.toFixed(6) : "--"}</div>
+            <div>Green Center Lng: {greenCenter ? greenCenter.lng.toFixed(6) : "--"}</div>
+            <div>Computed Distance (yd): {distYards !== null ? distYards : "--"}</div>
+          </div>
+        )}
         <div className="mt-3 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
           <div>This Hole: {strokesThisHole || "-"}</div>
           <button onClick={handleUndo} disabled={!round || round.events.filter((e) => e.hole === holeNumber).length === 0}>Undo</button>
@@ -301,7 +313,7 @@ export default function HolePage() {
             {Object.entries(SG_LABELS).map(([key, label]) => <div key={`hole-${key}`}>{label}: {formatSG(sgHoleByCategory[key as SGCategory] ?? 0)}</div>)}
           </div>
         </div>
-        {gpsError && <div className="mt-3 rounded-xl border p-3 text-sm text-amber-300" style={{ borderColor: "#92400e" }}>{gpsError} <button onClick={() => setRetryCount((c) => c + 1)}>Retry GPS</button></div>}
+        {gpsError && <div className="mt-3 rounded-xl border p-3 text-sm text-amber-300" style={{ borderColor: "#92400e" }}>{gpsError} <button onClick={() => { setGpsPermissionDenied(false); setGpsError(null); setRetryCount((c) => c + 1); }}>Retry GPS</button></div>}
         {loadError && <div className="mt-3 rounded-xl border p-3 text-sm text-red-300" style={{ borderColor: "#7f1d1d" }}>{loadError}</div>}
       </div>
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3" style={{ background: "linear-gradient(to top, var(--bg-primary) 70%, transparent)" }}>
