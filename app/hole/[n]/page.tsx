@@ -305,7 +305,7 @@ export default function HolePage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg-primary)", paddingBottom: "6rem" }}>
-      <ScorecardBar round={round} currentHole={holeNumber} />
+      <ScorecardBar round={round} currentHole={holeNumber} course={course} />
       <div className="mx-auto max-w-md px-4 py-4">
         <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
           <div className="flex items-center justify-between">
