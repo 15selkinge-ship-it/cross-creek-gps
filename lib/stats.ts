@@ -95,28 +95,22 @@ function getFir(shotEvents: ShotEvent[], par: number): { fir: HoleFlag; attempt:
 }
 
 function getUpAndDown(
-  eventsBeforeGreen: StrokeEvent[],
+  holeEvents: StrokeEvent[],
+  firstGreenIndex: number,
   gir: HoleFlag,
-  hasGreenEvent: boolean,
   par: number,
   strokes: number
 ): { value: HoleFlag; attempt: boolean } {
-  if (!hasGreenEvent || gir !== false) {
+  if (firstGreenIndex < 0 || gir !== false) {
     return { value: null, attempt: false };
   }
 
-  const shotsBeforeGreen = eventsBeforeGreen.filter((event) => event.type === "shot") as ShotEvent[];
-  const lastShotBeforeGreen = shotsBeforeGreen[shotsBeforeGreen.length - 1];
-
-  if (!lastShotBeforeGreen || !isFiniteNumber(lastShotBeforeGreen.end_distance_yds)) {
-    return { value: null, attempt: false };
-  }
-
-  if (lastShotBeforeGreen.end_distance_yds > 30) {
-    return { value: false, attempt: false };
-  }
-
-  return { value: strokes <= par, attempt: true };
+  const eventsAfterFirstGreen = holeEvents.slice(firstGreenIndex + 1);
+  const hasOnlyPuttingAfterGreen = eventsAfterFirstGreen.every((event) => event.type === "green");
+  return {
+    value: hasOnlyPuttingAfterGreen && strokes <= par,
+    attempt: true,
+  };
 }
 
 export function resolveParByHole(course: CourseGps | null): Record<number, number> {
@@ -160,7 +154,7 @@ export function buildRoundStats(round: Round | null, course: CourseGps | null): 
     const fir = firResult.fir;
     const firAttempt = completed && firResult.attempt;
 
-    const upAndDownResult = getUpAndDown(eventsBeforeGreen, gir, hasGreenEvent, par, strokes);
+    const upAndDownResult = getUpAndDown(holeEvents, firstGreenIndex, gir, par, strokes);
 
     holes.push({
       hole,

@@ -127,10 +127,10 @@ export default function HolePage() {
   useEffect(() => {
     if (!round || !sgBaseline) return;
     if (round.sg_baseline_version === sgBaseline.version && round.sg_total !== undefined) return;
-    const withSg = recalculateRoundSG(round, sgBaseline);
+    const withSg = recalculateRoundSG(round, sgBaseline, parByHole);
     setRound(withSg);
     saveRound(withSg);
-  }, [round, sgBaseline]);
+  }, [round, sgBaseline, parByHole]);
 
   useEffect(() => {
     if (!round?.ended_at) return;
@@ -141,7 +141,7 @@ export default function HolePage() {
 
   function updateRound(nextRound: Round) {
     const stamped = { ...nextRound, updated_at: nowIso() };
-    const withSG = sgBaseline ? recalculateRoundSG(stamped, sgBaseline) : stamped;
+    const withSG = sgBaseline ? recalculateRoundSG(stamped, sgBaseline, parByHole) : stamped;
     setRound(withSG);
     saveRound(withSG);
   }

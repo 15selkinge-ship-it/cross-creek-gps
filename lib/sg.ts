@@ -8,6 +8,7 @@ import type {
   ShotEvent,
   StrokeEvent,
 } from "./types";
+import { DEFAULT_PAR_BY_HOLE } from "./stats";
 
 type CurvePoint = { distance: number; expected: number };
 type SGBaseline = {
@@ -103,8 +104,15 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function shotCategory(shotIndexOnHole: number, shot: ShotEvent): SGCategory {
-  if (shotIndexOnHole === 0) return "off_tee";
+function shotCategory(
+  shotIndexOnHole: number,
+  shot: ShotEvent,
+  parByHole: Record<number, number>
+): SGCategory {
+  if (shotIndexOnHole === 0) {
+    const holePar = parByHole[shot.hole] ?? DEFAULT_PAR_BY_HOLE[shot.hole];
+    return holePar === 3 ? "approach" : "off_tee";
+  }
   if ((shot.start_distance_yds ?? 0) <= 50) return "short_game";
   return "approach";
 }
@@ -141,7 +149,11 @@ function penaltySG(): number {
   return -1;
 }
 
-export function recalculateRoundSG(round: Round, baseline: SGBaseline): Round {
+export function recalculateRoundSG(
+  round: Round,
+  baseline: SGBaseline,
+  parByHole: Record<number, number> = DEFAULT_PAR_BY_HOLE
+): Round {
   const sgByCategory = emptySGTotals();
   const shotCountsByHole: Record<number, number> = {};
 
@@ -149,7 +161,7 @@ export function recalculateRoundSG(round: Round, baseline: SGBaseline): Round {
     if (event.type === "shot") {
       const holeShotIndex = shotCountsByHole[event.hole] ?? 0;
       shotCountsByHole[event.hole] = holeShotIndex + 1;
-      const sgCategory = shotCategory(holeShotIndex, event);
+      const sgCategory = shotCategory(holeShotIndex, event, parByHole);
       const sg = shotSG(baseline, event);
       const finalized = {
         ...event,

@@ -36,6 +36,9 @@ Open `http://localhost:3000`.
   - `start_distance_yds`, `end_distance_yds`
   - `start_lie`, `end_lie`
   - computed `sg` and `sg_category`
+  - SG category rule for first shot:
+    - Par 4/5: first shot counts as `off_tee`
+    - Par 3: first shot counts as `approach`
 - Green events store `first_putt_ft = first_putt_paces * 3` and compute putting SG as `E(green, first_putt_ft) - putts`.
 - Penalty events apply +1 stroke and SG penalty of `-1.0`.
 - Round-level SG aggregates are saved as:
@@ -58,8 +61,11 @@ Open `http://localhost:3000`.
   - Round denominator: holes with a `green` event.
 - `Up & Down`:
   - Applicable only when `GIR` is false and a `green` event exists.
-  - Attempt when last non-green shot before reaching green has `end_distance_yds <= 30`.
-  - Success when attempt is true and hole score is `<= par`.
+  - Attempt is any missed-GIR hole that reached green.
+  - Success requires both:
+    - Hole score `<= par`
+    - No non-`green` events after the first `green` event (only putting events from first green to hole-out).
+  - Penalties before reaching green are allowed and counted in strokes.
   - Round denominator: up-and-down attempts only.
 - `To Par`:
   - Round to-par uses scored holes only (`strokes > 0`), so early-ended rounds are relative to holes played.
