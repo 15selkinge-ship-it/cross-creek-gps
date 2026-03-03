@@ -6,7 +6,7 @@ import ScorecardBar from "@/components/ScorecardBar";
 import { fetchCourse } from "@/lib/course";
 import { distanceYards, pacesToFeet } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
-import type { Coordinate, Course, Hole, LieType, Round, StrokeEvent } from "@/lib/types";
+import type { Coordinate, Course, Hole, LieType, Round, ShotEvent, StrokeEvent } from "@/lib/types";
 
 type PositionState = {
   lat: number;
@@ -39,14 +39,24 @@ function createEventId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function isGpsShotOnHole(event: StrokeEvent, holeNumber: number): event is ShotEvent & Coordinate {
+  return (
+    event.hole === holeNumber &&
+    event.type === "shot" &&
+    typeof event.lat === "number" &&
+    typeof event.lng === "number"
+  );
+}
+
 export default function HolePage() {
   const params = useParams<{ n: string }>();
   const router = useRouter();
   const holeNumber = Number(params.n);
-  const geolocationSupported = typeof navigator !== "undefined" && "geolocation" in navigator;
 
+  const [mounted, setMounted] = useState(false);
+  const [geolocationSupported, setGeolocationSupported] = useState(false);
   const [course, setCourse] = useState<Course | null>(null);
-  const [round, setRound] = useState<Round | null>(() => getStoredRound());
+  const [round, setRound] = useState<Round | null>(null);
   const [position, setPosition] = useState<PositionState | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -61,6 +71,10 @@ export default function HolePage() {
   const isHoleNumberValid = Number.isInteger(holeNumber) && holeNumber >= 1 && holeNumber <= 18;
 
   useEffect(() => {
+    setMounted(true);
+    setRound(getStoredRound());
+    setGeolocationSupported(typeof navigator !== "undefined" && "geolocation" in navigator);
+
     fetchCourse()
       .then(setCourse)
       .catch(() => setLoadError("Unable to load course data from /public/course.json."));
@@ -156,18 +170,12 @@ export default function HolePage() {
       return;
     }
 
-    const lastShotOnHole = [...activeRound.events]
+    const lastGpsShotOnHole = [...activeRound.events]
       .reverse()
-      .find(
-        (event) =>
-          event.hole === holeNumber &&
-          event.type === "shot" &&
-          typeof event.lat === "number" &&
-          typeof event.lng === "number",
-      );
+      .find((event): event is ShotEvent & Coordinate => isGpsShotOnHole(event, holeNumber));
 
-    const previousCoordinate: Coordinate = lastShotOnHole
-      ? { lat: lastShotOnHole.lat as number, lng: lastShotOnHole.lng as number }
+    const previousCoordinate: Coordinate = lastGpsShotOnHole
+      ? { lat: lastGpsShotOnHole.lat, lng: lastGpsShotOnHole.lng }
       : hole.tee;
 
     const shotCoordinate: Coordinate = { lat: position.lat, lng: position.lng };
@@ -348,9 +356,9 @@ export default function HolePage() {
       <section className="mt-3 rounded-2xl bg-white p-5 shadow-sm">
         <p className="text-sm text-slate-600">Distance to green center</p>
         <p className="mt-1 text-4xl font-bold text-emerald-700">
-          {distanceToGreenYards !== null ? `${distanceToGreenYards} yd` : "--"}
+          {mounted && distanceToGreenYards !== null ? `${distanceToGreenYards} yd` : "—"}
         </p>
-        {position ? (
+        {mounted && position ? (
           <p className="mt-1 text-xs text-slate-500">GPS accuracy: {Math.round(position.accuracy)} m</p>
         ) : null}
       </section>
@@ -364,7 +372,7 @@ export default function HolePage() {
         </p>
       </section>
 
-      {!geolocationSupported ? (
+      {mounted && !geolocationSupported ? (
         <section className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           This browser does not support GPS location.
         </section>
@@ -392,7 +400,7 @@ export default function HolePage() {
       <button
         type="button"
         onClick={handleLogShot}
-        disabled={!hole || !position}
+        disabled={!mounted || !hole || !position}
         className="mt-4 h-16 w-full rounded-2xl bg-emerald-600 text-xl font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
       >
         Log Shot Here

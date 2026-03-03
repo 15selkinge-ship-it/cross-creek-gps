@@ -24,11 +24,14 @@ function createRound(teeSetId: string): Round {
 
 export default function Home() {
   const router = useRouter();
-  const [round, setRound] = useState<Round | null>(() => getStoredRound());
+  const [mounted, setMounted] = useState(false);
+  const [round, setRound] = useState<Round | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+    setRound(getStoredRound());
     fetchCourse()
       .then(setCourse)
       .catch(() => setError("Unable to load /public/course.json."));
@@ -121,7 +124,7 @@ export default function Home() {
       <section className="rounded-2xl bg-white p-4 text-sm text-slate-700 shadow-sm">
         <p>Storage key: <code>cc_round_v1</code></p>
         <p className="mt-1">
-          {round
+          {mounted && round
             ? `Round started ${new Date(round.started_at).toLocaleString()}`
             : "No saved round yet."}
         </p>
