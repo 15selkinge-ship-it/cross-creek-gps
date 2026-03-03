@@ -22,19 +22,40 @@ export type Course = {
 
 export type LieType = "fairway" | "rough" | "sand" | "green" | "penalty";
 
-export type StrokeEvent = {
+export type ShotEvent = {
   id: string;
   hole: number;
-  type: "shot" | "penalty";
+  type: "shot";
   stroke_value: 1;
   timestamp: string;
   lat?: number;
   lng?: number;
   distance_from_prev_yd?: number;
   lie?: LieType;
-  putt_distance_ft?: number;
   notes?: string;
 };
+
+export type PenaltyEvent = {
+  id: string;
+  hole: number;
+  type: "penalty";
+  stroke_value: 1;
+  timestamp: string;
+  notes?: string;
+};
+
+export type GreenEvent = {
+  id: string;
+  type: "green";
+  hole: number;
+  first_putt_paces: number;
+  first_putt_ft: number;
+  putts: number;
+  stroke_value: number;
+  timestamp: string;
+};
+
+export type StrokeEvent = ShotEvent | PenaltyEvent | GreenEvent;
 
 export type Round = {
   id: string;

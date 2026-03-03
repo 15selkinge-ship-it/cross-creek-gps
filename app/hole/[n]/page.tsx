@@ -54,6 +54,7 @@ export default function HolePage() {
   const [puttModalOpen, setPuttModalOpen] = useState(false);
   const [pendingShotId, setPendingShotId] = useState<string | null>(null);
   const [puttPaces, setPuttPaces] = useState("");
+  const [puttCount, setPuttCount] = useState(2);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const hole = useMemo(() => findHole(course, round, holeNumber), [course, round, holeNumber]);
@@ -111,6 +112,10 @@ export default function HolePage() {
       ...roundData,
       events: roundData.events.map((event) => (event.id === eventId ? updater(event) : event)),
     };
+  }
+
+  function eventStrokes(event: StrokeEvent): number {
+    return Number.isFinite(event.stroke_value) ? event.stroke_value : 0;
   }
 
   function ensureRound(): Round | null {
@@ -218,6 +223,7 @@ export default function HolePage() {
     setLieModalOpen(false);
     if (lie === "green") {
       setPuttPaces("");
+      setPuttCount(2);
       setPuttModalOpen(true);
       return;
     }
@@ -225,7 +231,7 @@ export default function HolePage() {
     setPendingShotId(null);
   }
 
-  function handleSavePuttDistance() {
+  function handleSavePuttingEntry() {
     if (!round || !pendingShotId) {
       setPuttModalOpen(false);
       return;
@@ -235,12 +241,39 @@ export default function HolePage() {
     if (!Number.isFinite(paces) || paces < 0) {
       return;
     }
+    if (!Number.isInteger(puttCount) || puttCount < 0) {
+      return;
+    }
 
-    const withPuttDistance = applyToEvent(round, pendingShotId, (event) => ({
-      ...event,
-      putt_distance_ft: pacesToFeet(paces),
-    }));
-    updateRound(withPuttDistance);
+    const greenEvent: StrokeEvent = {
+      id: createEventId(),
+      type: "green",
+      hole: holeNumber,
+      first_putt_paces: paces,
+      first_putt_ft: pacesToFeet(paces),
+      putts: puttCount,
+      stroke_value: puttCount,
+      timestamp: nowIso(),
+    };
+    updateRound({
+      ...round,
+      events: [...round.events, greenEvent],
+    });
+    setPuttModalOpen(false);
+    setPendingShotId(null);
+  }
+
+  function handleUndoLastAction() {
+    if (!round || round.events.length === 0) {
+      return;
+    }
+
+    updateRound({
+      ...round,
+      current_hole: holeNumber,
+      events: round.events.slice(0, -1),
+    });
+    setLieModalOpen(false);
     setPuttModalOpen(false);
     setPendingShotId(null);
   }
@@ -256,9 +289,9 @@ export default function HolePage() {
   }
 
   const strokesThisHole = round
-    ? round.events.filter((event) => event.hole === holeNumber).reduce((total, event) => total + event.stroke_value, 0)
+    ? round.events.filter((event) => event.hole === holeNumber).reduce((total, event) => total + eventStrokes(event), 0)
     : 0;
-  const totalStrokes = round ? round.events.reduce((total, event) => total + event.stroke_value, 0) : 0;
+  const totalStrokes = round ? round.events.reduce((total, event) => total + eventStrokes(event), 0) : 0;
 
   const distanceToGreenYards =
     hole && position
@@ -364,6 +397,14 @@ export default function HolePage() {
       >
         Log Shot Here
       </button>
+      <button
+        type="button"
+        onClick={handleUndoLastAction}
+        disabled={!round || round.events.length === 0}
+        className="mt-2 h-12 w-full rounded-xl bg-slate-200 text-sm font-semibold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+      >
+        Undo Last Action
+      </button>
 
       {lieModalOpen ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/40 p-4">
@@ -388,25 +429,48 @@ export default function HolePage() {
       {puttModalOpen ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">
           <div className="w-full rounded-2xl bg-white p-4 shadow-xl">
-            <h2 className="text-lg font-bold text-slate-900">Putt Distance</h2>
+            <h2 className="text-lg font-bold text-slate-900">Putting</h2>
             <label htmlFor="paces" className="mt-2 block text-sm text-slate-700">
-              Enter paces (1 pace = 3 ft)
+              First putt distance in paces (1 pace = 3 ft)
             </label>
             <input
               id="paces"
               inputMode="decimal"
               type="number"
               min="0"
+              step="0.1"
               value={puttPaces}
               onChange={(event) => setPuttPaces(event.target.value)}
               className="mt-2 h-12 w-full rounded-lg border border-slate-300 px-3 text-lg"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              {puttPaces === "" || Number(puttPaces) < 0 || !Number.isFinite(Number(puttPaces))
+                ? "Enter a valid value."
+                : `${pacesToFeet(Number(puttPaces)).toFixed(1)} ft`}
+            </p>
+            <p className="mt-3 text-sm text-slate-700">Number of putts</p>
+            <div className="mt-2 grid grid-cols-6 gap-2">
+              {[0, 1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPuttCount(value)}
+                  className={`h-11 rounded-lg text-base font-semibold ${
+                    puttCount === value
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-100 text-slate-900"
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
-              onClick={handleSavePuttDistance}
+              onClick={handleSavePuttingEntry}
               className="mt-3 h-12 w-full rounded-lg bg-slate-900 font-semibold text-white"
             >
-              Save Putt Distance
+              Save Putting
             </button>
           </div>
         </div>

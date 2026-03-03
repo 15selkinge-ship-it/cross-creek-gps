@@ -17,9 +17,6 @@ function holeStrokes(round: Round | null, hole: number): number {
     if (event.hole !== hole) {
       return total;
     }
-    if (event.type !== "shot" && event.type !== "penalty") {
-      return total;
-    }
     return total + event.stroke_value;
   }, 0);
 }
