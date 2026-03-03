@@ -1,24 +1,175 @@
 {
-  "version": "ccg-v1-2026-03-03",
+  "version": "v1_scratch",
+  "skill_baselines": {
+    "scratch": {
+      "lies": {
+        "fairway": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 25, "expected": 2.30 },
+          { "distance": 50, "expected": 2.80 },
+          { "distance": 75, "expected": 3.00 },
+          { "distance": 100, "expected": 3.20 },
+          { "distance": 125, "expected": 3.35 },
+          { "distance": 150, "expected": 3.50 },
+          { "distance": 175, "expected": 3.70 },
+          { "distance": 200, "expected": 3.95 },
+          { "distance": 225, "expected": 4.20 },
+          { "distance": 250, "expected": 4.45 },
+          { "distance": 275, "expected": 4.70 },
+          { "distance": 300, "expected": 4.95 },
+          { "distance": 350, "expected": 5.40 },
+          { "distance": 400, "expected": 5.90 },
+          { "distance": 450, "expected": 6.30 },
+          { "distance": 500, "expected": 6.70 }
+        ],
+        "rough": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 25, "expected": 2.45 },
+          { "distance": 50, "expected": 2.95 },
+          { "distance": 75, "expected": 3.15 },
+          { "distance": 100, "expected": 3.35 },
+          { "distance": 125, "expected": 3.55 },
+          { "distance": 150, "expected": 3.75 },
+          { "distance": 175, "expected": 3.95 },
+          { "distance": 200, "expected": 4.20 },
+          { "distance": 225, "expected": 4.50 },
+          { "distance": 250, "expected": 4.80 },
+          { "distance": 275, "expected": 5.05 },
+          { "distance": 300, "expected": 5.35 },
+          { "distance": 350, "expected": 5.80 },
+          { "distance": 400, "expected": 6.25 },
+          { "distance": 450, "expected": 6.70 },
+          { "distance": 500, "expected": 7.10 }
+        ],
+        "sand": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 10, "expected": 2.60 },
+          { "distance": 20, "expected": 2.85 },
+          { "distance": 30, "expected": 3.05 },
+          { "distance": 40, "expected": 3.20 },
+          { "distance": 50, "expected": 3.35 },
+          { "distance": 75, "expected": 3.65 },
+          { "distance": 100, "expected": 4.00 },
+          { "distance": 125, "expected": 4.25 },
+          { "distance": 150, "expected": 4.55 },
+          { "distance": 175, "expected": 4.85 },
+          { "distance": 200, "expected": 5.20 }
+        ],
+        "green": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 1, "expected": 1.04 },
+          { "distance": 2, "expected": 1.11 },
+          { "distance": 3, "expected": 1.18 },
+          { "distance": 4, "expected": 1.24 },
+          { "distance": 5, "expected": 1.30 },
+          { "distance": 8, "expected": 1.47 },
+          { "distance": 10, "expected": 1.57 },
+          { "distance": 15, "expected": 1.80 },
+          { "distance": 20, "expected": 1.96 },
+          { "distance": 25, "expected": 2.10 },
+          { "distance": 30, "expected": 2.22 },
+          { "distance": 40, "expected": 2.42 },
+          { "distance": 50, "expected": 2.58 },
+          { "distance": 60, "expected": 2.72 },
+          { "distance": 80, "expected": 2.95 },
+          { "distance": 100, "expected": 3.15 }
+        ]
+      }
+    },
+    "10hcp": {
+      "lies": {
+        "fairway": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 100, "expected": 3.35 },
+          { "distance": 200, "expected": 4.20 },
+          { "distance": 300, "expected": 5.25 },
+          { "distance": 400, "expected": 6.20 },
+          { "distance": 500, "expected": 7.00 }
+        ],
+        "rough": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 100, "expected": 3.55 },
+          { "distance": 200, "expected": 4.50 },
+          { "distance": 300, "expected": 5.60 },
+          { "distance": 400, "expected": 6.60 },
+          { "distance": 500, "expected": 7.35 }
+        ],
+        "sand": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 20, "expected": 3.05 },
+          { "distance": 50, "expected": 3.55 },
+          { "distance": 100, "expected": 4.30 },
+          { "distance": 150, "expected": 4.95 },
+          { "distance": 200, "expected": 5.55 }
+        ],
+        "green": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 5, "expected": 1.38 },
+          { "distance": 10, "expected": 1.68 },
+          { "distance": 20, "expected": 2.08 },
+          { "distance": 40, "expected": 2.58 },
+          { "distance": 60, "expected": 2.88 },
+          { "distance": 100, "expected": 3.30 }
+        ]
+      }
+    },
+    "20hcp": {
+      "lies": {
+        "fairway": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 100, "expected": 3.55 },
+          { "distance": 200, "expected": 4.60 },
+          { "distance": 300, "expected": 5.85 },
+          { "distance": 400, "expected": 6.90 },
+          { "distance": 500, "expected": 7.70 }
+        ],
+        "rough": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 100, "expected": 3.80 },
+          { "distance": 200, "expected": 4.95 },
+          { "distance": 300, "expected": 6.20 },
+          { "distance": 400, "expected": 7.30 },
+          { "distance": 500, "expected": 8.10 }
+        ],
+        "sand": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 20, "expected": 3.25 },
+          { "distance": 50, "expected": 3.85 },
+          { "distance": 100, "expected": 4.70 },
+          { "distance": 150, "expected": 5.45 },
+          { "distance": 200, "expected": 6.15 }
+        ],
+        "green": [
+          { "distance": 0, "expected": 0 },
+          { "distance": 5, "expected": 1.48 },
+          { "distance": 10, "expected": 1.84 },
+          { "distance": 20, "expected": 2.28 },
+          { "distance": 40, "expected": 2.85 },
+          { "distance": 60, "expected": 3.25 },
+          { "distance": 100, "expected": 3.70 }
+        ]
+      }
+    }
+  },
   "lies": {
     "fairway": [
       { "distance": 0, "expected": 0 },
-      { "distance": 25, "expected": 2.3 },
-      { "distance": 50, "expected": 2.8 },
-      { "distance": 75, "expected": 3.0 },
-      { "distance": 100, "expected": 3.2 },
+      { "distance": 25, "expected": 2.30 },
+      { "distance": 50, "expected": 2.80 },
+      { "distance": 75, "expected": 3.00 },
+      { "distance": 100, "expected": 3.20 },
       { "distance": 125, "expected": 3.35 },
-      { "distance": 150, "expected": 3.5 },
-      { "distance": 175, "expected": 3.7 },
+      { "distance": 150, "expected": 3.50 },
+      { "distance": 175, "expected": 3.70 },
       { "distance": 200, "expected": 3.95 },
-      { "distance": 225, "expected": 4.2 },
+      { "distance": 225, "expected": 4.20 },
       { "distance": 250, "expected": 4.45 },
-      { "distance": 275, "expected": 4.7 },
+      { "distance": 275, "expected": 4.70 },
       { "distance": 300, "expected": 4.95 },
-      { "distance": 350, "expected": 5.4 },
-      { "distance": 400, "expected": 5.9 },
-      { "distance": 450, "expected": 6.3 },
-      { "distance": 500, "expected": 6.7 }
+      { "distance": 350, "expected": 5.40 },
+      { "distance": 400, "expected": 5.90 },
+      { "distance": 450, "expected": 6.30 },
+      { "distance": 500, "expected": 6.70 }
     ],
     "rough": [
       { "distance": 0, "expected": 0 },
@@ -29,29 +180,29 @@
       { "distance": 125, "expected": 3.55 },
       { "distance": 150, "expected": 3.75 },
       { "distance": 175, "expected": 3.95 },
-      { "distance": 200, "expected": 4.2 },
-      { "distance": 225, "expected": 4.5 },
-      { "distance": 250, "expected": 4.8 },
+      { "distance": 200, "expected": 4.20 },
+      { "distance": 225, "expected": 4.50 },
+      { "distance": 250, "expected": 4.80 },
       { "distance": 275, "expected": 5.05 },
       { "distance": 300, "expected": 5.35 },
-      { "distance": 350, "expected": 5.8 },
+      { "distance": 350, "expected": 5.80 },
       { "distance": 400, "expected": 6.25 },
-      { "distance": 450, "expected": 6.7 },
-      { "distance": 500, "expected": 7.1 }
+      { "distance": 450, "expected": 6.70 },
+      { "distance": 500, "expected": 7.10 }
     ],
     "sand": [
       { "distance": 0, "expected": 0 },
-      { "distance": 10, "expected": 2.6 },
+      { "distance": 10, "expected": 2.60 },
       { "distance": 20, "expected": 2.85 },
       { "distance": 30, "expected": 3.05 },
-      { "distance": 40, "expected": 3.2 },
+      { "distance": 40, "expected": 3.20 },
       { "distance": 50, "expected": 3.35 },
       { "distance": 75, "expected": 3.65 },
-      { "distance": 100, "expected": 4.0 },
+      { "distance": 100, "expected": 4.00 },
       { "distance": 125, "expected": 4.25 },
       { "distance": 150, "expected": 4.55 },
       { "distance": 175, "expected": 4.85 },
-      { "distance": 200, "expected": 5.2 }
+      { "distance": 200, "expected": 5.20 }
     ],
     "green": [
       { "distance": 0, "expected": 0 },
@@ -59,12 +210,12 @@
       { "distance": 2, "expected": 1.11 },
       { "distance": 3, "expected": 1.18 },
       { "distance": 4, "expected": 1.24 },
-      { "distance": 5, "expected": 1.3 },
+      { "distance": 5, "expected": 1.30 },
       { "distance": 8, "expected": 1.47 },
       { "distance": 10, "expected": 1.57 },
-      { "distance": 15, "expected": 1.8 },
+      { "distance": 15, "expected": 1.80 },
       { "distance": 20, "expected": 1.96 },
-      { "distance": 25, "expected": 2.1 },
+      { "distance": 25, "expected": 2.10 },
       { "distance": 30, "expected": 2.22 },
       { "distance": 40, "expected": 2.42 },
       { "distance": 50, "expected": 2.58 },

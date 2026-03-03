@@ -32,18 +32,31 @@ Open `http://localhost:3000`.
 - Round data is stored in `localStorage` key `cc_round_v1`.
 - Hole screen uses `navigator.geolocation.watchPosition` for live yardage.
 - SG baseline loads from `public/sg_expected.json` (version stored on round as `sg_baseline_version`).
-- Shot events now store:
+- SG baseline version currently shipped: `v1_scratch` (`ACTIVE_SKILL_BASELINE="scratch"` in `lib/sg.ts`).
+- Shot events store complete SG start/end state:
   - `start_distance_yds`, `end_distance_yds`
   - `start_lie`, `end_lie`
+  - `distance_from_prev_yd`
   - computed `sg` and `sg_category`
-  - SG category rule for first shot:
-    - Par 4/5: first shot counts as `off_tee`
-    - Par 3: first shot counts as `approach`
+- SG category rules (`categorizeShot()` in `lib/sg.ts`, used by live/summary/export):
+  - `putting`: all `green` events
+  - `penalty`: all `penalty` events
+  - `off_tee`: first in-play tee shot on par 4/5
+  - `short_game`: non-green shots with `start_distance_yds <= 30` (`SHORT_MAX_YD`)
+  - `approach`: other non-green shots (`start_distance_yds > 30`)
+  - Classification is based on **start distance**, never end distance.
 - Green events store `first_putt_ft = first_putt_paces * 3` and compute putting SG as `E(green, first_putt_ft) - putts`.
-- Penalty events apply +1 stroke and SG penalty of `-1.0`.
+- If `putts = 0`, the app treats it as chip-in and records putting SG as `0`.
+- Penalty model is intentionally simple and auditable:
+  - +1 stroke on scorecard for every penalty event
+  - `SG_penalty = -1.0` per penalty event (no virtual drop-location model)
 - Round-level SG aggregates are saved as:
   - `sg_total`
   - `sg_by_category` (`off_tee`, `approach`, `short_game`, `putting`, `penalty`)
+- Per-event SG debug payload (`sg_debug`) includes:
+  - start/end lie and distance
+  - `E(start)` and `E(end)`
+  - per-shot `SG_shot`
 - Round summary is available at `/round` (and alias `/round-summary`) with SG + dashboard totals and hole-by-hole rows.
 
 ## Round Dashboard Metrics
@@ -73,5 +86,13 @@ Open `http://localhost:3000`.
 ## Current Data Limits
 
 - Hole completion is inferred by presence of a `green` event.
-- If `end_lie` or `end_distance_yds` is missing for relevant shots, FIR / Up & Down may be unknown.
+- Pin proxy is currently green center (`greenCenter`), not live hole location.
+- Penalty SG uses the simplified fixed `-1.0` model instead of a modeled drop state.
+- Tee/green GPS validation rejects out-of-range coordinates and unrealistic distances.
 - If multiple `green` events exist on one hole, GIR uses the first green timestamp and putts use the latest stored green event.
+
+## Debugging SG
+
+- Set `NEXT_PUBLIC_DEBUG_SG=1` to render an SG audit table on each hole.
+- The table shows per-shot category, start/end state, expected strokes values, and shot SG.
+- Hole and category totals shown in the debug panel are direct sums of per-event SG values.

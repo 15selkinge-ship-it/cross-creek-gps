@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { fetchCourse } from "@/lib/course";
 import { clearStoredRound, getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG } from "@/lib/sg";
+import { resolveParByHole } from "@/lib/stats";
 import type { Round } from "@/lib/types";
 
 function createRound(): Round {
@@ -29,18 +30,32 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
     const stored = getStoredRound();
-    if (stored) {
-      loadSGBaseline()
-        .then((baseline) => {
-          const withSg = recalculateRoundSG(stored, baseline);
-          setRound(withSg);
-          saveRound(withSg);
-        })
-        .catch(() => setRound(stored));
-    } else {
+    if (!stored) {
       setRound(null);
+      fetchCourse().catch(() => setError("Unable to load course data."));
+      return;
     }
-    fetchCourse().catch(() => setError("Unable to load course data."));
+
+    fetchCourse()
+      .then((course) => {
+        loadSGBaseline()
+          .then((baseline) => {
+            const withSg = recalculateRoundSG(stored, baseline, resolveParByHole(course));
+            setRound(withSg);
+            saveRound(withSg);
+          })
+          .catch(() => setRound(stored));
+      })
+      .catch(() => {
+        setError("Unable to load course data.");
+        loadSGBaseline()
+          .then((baseline) => {
+            const withSg = recalculateRoundSG(stored, baseline);
+            setRound(withSg);
+            saveRound(withSg);
+          })
+          .catch(() => setRound(stored));
+      });
   }, []);
 
   function handleStartRound() {

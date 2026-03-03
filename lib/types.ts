@@ -14,14 +14,29 @@ export type CourseGps = {
 };
 
 export type LieType = "fairway" | "rough" | "sand" | "green" | "penalty";
+export type StartLieType = Exclude<LieType, "penalty"> | "tee";
 
 export type SGCategory = "off_tee" | "approach" | "short_game" | "putting" | "penalty";
 
 export type SGCategoryTotals = Record<SGCategory, number>;
 
+export type SGDebugInfo = {
+  category: SGCategory;
+  start_lie: StartLieType | "penalty";
+  start_distance: number;
+  start_unit: "yd" | "ft";
+  end_lie: LieType | "holed";
+  end_distance: number;
+  end_unit: "yd" | "ft";
+  e_start: number;
+  e_end: number;
+  sg_shot: number;
+};
+
 export type SGMeta = {
   sg: number;
   sg_category: SGCategory;
+  sg_debug?: SGDebugInfo;
 };
 
 export type ShotEvent = {
@@ -30,13 +45,13 @@ export type ShotEvent = {
   type: "shot";
   stroke_value: 1;
   timestamp: string;
-  lat?: number;
-  lng?: number;
-  distance_from_prev_yd?: number;
-  start_distance_yds?: number;
-  end_distance_yds?: number;
-  start_lie?: Exclude<LieType, "penalty">;
-  end_lie?: LieType;
+  lat: number;
+  lng: number;
+  distance_from_prev_yd: number;
+  start_distance_yds: number;
+  end_distance_yds: number;
+  start_lie: StartLieType;
+  end_lie: LieType;
   notes?: string;
 } & Partial<SGMeta>;
 

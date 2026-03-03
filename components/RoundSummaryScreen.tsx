@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { fetchCourse } from "@/lib/course";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG } from "@/lib/sg";
-import { buildRoundStats } from "@/lib/stats";
+import { buildRoundStats, resolveParByHole } from "@/lib/stats";
 import type { CourseGps, Round, SGCategory } from "@/lib/types";
 
 const SG_LABELS: Record<SGCategory, string> = {
@@ -52,23 +52,23 @@ export default function RoundSummaryScreen() {
     }
 
     fetchCourse().then((data) => {
-      if (alive) setCourse(data);
+      if (!alive) return;
+      setCourse(data);
+      loadSGBaseline()
+        .then((baseline) => {
+          if (!alive) return;
+          const withSg = recalculateRoundSG(stored, baseline, resolveParByHole(data));
+          setRound(withSg);
+          saveRound(withSg);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setRound(stored);
+          setError((prev) => prev ?? "Unable to load SG baseline.");
+        });
     }).catch(() => {
       if (alive) setError("Unable to load course data.");
     });
-
-    loadSGBaseline()
-      .then((baseline) => {
-        if (!alive) return;
-        const withSg = recalculateRoundSG(stored, baseline);
-        setRound(withSg);
-        saveRound(withSg);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setRound(stored);
-        setError((prev) => prev ?? "Unable to load SG baseline.");
-      });
 
     return () => {
       alive = false;
