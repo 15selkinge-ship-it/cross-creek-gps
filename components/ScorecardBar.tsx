@@ -66,7 +66,11 @@ export default function ScorecardBar({ round, currentHole, className }: Props) {
 
           <div className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-1"
             style={{ background: "#111a14", border: "1px solid #1f3d28" }}>
-            {(["Out",out],["In",inn],["Tot",total]) && [["Out",out],["In",inn],["Tot",total]].map(([label, val], i) => (
+            {[
+              ["Out", out],
+              ["In", inn],
+              ["Tot", total],
+            ].map(([label, val], i) => (
               <div key={label} className="flex items-center gap-2">
                 {i > 0 && <div className="h-4 w-px" style={{ background: "#1f3d28" }} />}
                 <div className="text-center">
