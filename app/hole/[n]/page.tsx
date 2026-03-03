@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import ScorecardBar from "@/components/ScorecardBar";
 import { fetchCourse } from "@/lib/course";
 import { distanceYards, pacesToFeet } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
@@ -267,6 +268,7 @@ export default function HolePage() {
   if (!isHoleNumberValid) {
     return (
       <main className="mx-auto min-h-screen w-full max-w-md bg-slate-50 p-4">
+        <ScorecardBar round={round} currentHole={Math.min(Math.max(holeNumber, 1), 18)} />
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <h1 className="text-xl font-bold text-slate-900">Invalid hole</h1>
           <p className="mt-2 text-sm text-slate-700">Use a hole number from 1 through 18.</p>
@@ -284,15 +286,10 @@ export default function HolePage() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-md bg-slate-50 p-4">
-      <header className="rounded-2xl bg-white p-3 shadow-sm">
+      <ScorecardBar round={round} currentHole={holeNumber} />
+
+      <header className="mt-3 rounded-2xl bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="h-11 rounded-lg bg-slate-200 px-3 text-sm font-semibold text-slate-800"
-          >
-            Home
-          </button>
           <h1 className="text-lg font-bold text-slate-900">Hole {holeNumber}</h1>
           <div className="flex gap-2">
             <button
