@@ -7,13 +7,13 @@ import { fetchCourse } from "@/lib/course";
 import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG, type SGBaseline } from "@/lib/sg";
+import { buildRoundStats, resolveParByHole } from "@/lib/stats";
 import type { Coordinate, CourseGps, HoleGps, LieType, Round, SGCategory, ShotEvent, StrokeEvent } from "@/lib/types";
 
 type PositionState = { lat: number; lng: number; accuracy: number };
 const MAX_GPS_ACCURACY_METERS = 100;
 const MAX_REASONABLE_DISTANCE_YARDS = 3000;
 
-const HOLE_PARS = [5, 3, 4, 4, 3, 4, 3, 5, 4, 4, 3, 5, 3, 4, 5, 3, 4, 5];
 const HOLE_HCP = [17, 13, 7, 3, 11, 5, 15, 1, 9, 8, 10, 4, 6, 2, 16, 12, 14, 18];
 const CLUBS = ["Driver", "3W", "5W", "4i", "5i", "6i", "7i", "8i", "9i", "PW", "52", "56", "60", "Putter"];
 const LIES: Array<{ label: string; value: LieType }> = [
@@ -39,6 +39,14 @@ function uid() {
 }
 function formatSG(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+function formatPct(value: number | null) {
+  return value === null ? "--" : `${Math.round(value)}%`;
+}
+function formatFlag(value: boolean | null) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "--";
 }
 function findHole(course: CourseGps | null, n: number): HoleGps | null {
   if (!course) return null;
@@ -86,7 +94,8 @@ export default function HolePage() {
 
   const isValid = Number.isInteger(holeNumber) && holeNumber >= 1 && holeNumber <= 18;
   const hole = useMemo(() => findHole(course, holeNumber), [course, holeNumber]);
-  const par = isValid ? HOLE_PARS[holeNumber - 1] : 4;
+  const parByHole = useMemo(() => resolveParByHole(course), [course]);
+  const par = isValid ? (parByHole[holeNumber] ?? 4) : 4;
   const hcp = isValid ? HOLE_HCP[holeNumber - 1] : 0;
 
   useEffect(() => {
@@ -122,6 +131,13 @@ export default function HolePage() {
     setRound(withSg);
     saveRound(withSg);
   }, [round, sgBaseline]);
+
+  useEffect(() => {
+    if (!round?.ended_at) return;
+    setLieModalOpen(false);
+    setPuttModalOpen(false);
+    setPendingShotId(null);
+  }, [round?.ended_at]);
 
   function updateRound(nextRound: Round) {
     const stamped = { ...nextRound, updated_at: nowIso() };
@@ -160,6 +176,7 @@ export default function HolePage() {
   }
 
   function handleLogShot() {
+    if (round?.ended_at) return;
     if (!hole || !position) return setGpsError("Waiting for GPS fix...");
     if (position.accuracy > MAX_GPS_ACCURACY_METERS) return setGpsError("Waiting for accurate GPS fix...");
     const currentCoord = { lat: position.lat, lng: position.lng };
@@ -202,6 +219,7 @@ export default function HolePage() {
     setLieModalOpen(true);
   }
   function handleConfirmLog() {
+    if (round?.ended_at) return;
     if (!round || !pendingShotId || !selectedLie) return;
     const withLie = { ...round, events: round.events.map((e) => (e.id === pendingShotId ? { ...e, end_lie: selectedLie, notes: selectedClub ?? undefined } : e)) };
     updateRound(withLie);
@@ -221,6 +239,7 @@ export default function HolePage() {
     setPendingShotId(null);
   }
   function handleSavePutts() {
+    if (round?.ended_at) return setPuttModalOpen(false);
     if (!round || !pendingShotId) return setPuttModalOpen(false);
     const paces = Number(puttPaces);
     if (!Number.isFinite(paces) || paces < 0) return;
@@ -229,6 +248,7 @@ export default function HolePage() {
     setPendingShotId(null);
   }
   function handleUndo() {
+    if (round?.ended_at) return;
     if (!round || round.events.length === 0) return;
     updateRound({ ...round, current_hole: holeNumber, events: round.events.slice(0, -1) });
     setLieModalOpen(false);
@@ -238,6 +258,17 @@ export default function HolePage() {
   function handleGoToHole(n: number) {
     if (round) updateRound({ ...round, current_hole: n });
     router.push(`/hole/${n}`);
+  }
+  function handleEndRound() {
+    const activeRound = ensureRound();
+    if (!activeRound) return;
+    const endedRound: Round = { ...activeRound, ended_at: nowIso(), current_hole: holeNumber };
+    updateRound(endedRound);
+    router.push("/round");
+  }
+  function handleResumeEdit() {
+    if (!round) return;
+    updateRound({ ...round, ended_at: undefined, current_hole: holeNumber });
   }
 
   const strokesThisHole = round?.events.filter((e) => e.hole === holeNumber).reduce((s, e) => s + e.stroke_value, 0) ?? 0;
@@ -258,6 +289,9 @@ export default function HolePage() {
   const sgPuttingThisHole = holePuttingSG(round, holeNumber);
   const sgRoundByCategory = round?.sg_by_category ?? emptySGTotals();
   const sgHoleByCategory = holeCategorySG(round, holeNumber);
+  const roundStats = useMemo(() => buildRoundStats(round, course), [round, course]);
+  const holeStats = roundStats.holes[holeNumber - 1];
+  const isRoundEnded = Boolean(round?.ended_at);
   const showGpsDebug = process.env.NEXT_PUBLIC_DEBUG_GPS === "1";
   const noGps = !geoSupported || gpsPermissionDenied;
 
@@ -300,7 +334,8 @@ export default function HolePage() {
         )}
         <div className="mt-3 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
           <div>This Hole: {strokesThisHole || "-"}</div>
-          <button onClick={handleUndo} disabled={!round || round.events.filter((e) => e.hole === holeNumber).length === 0}>Undo</button>
+          <button onClick={handleUndo} disabled={!round || isRoundEnded || round.events.filter((e) => e.hole === holeNumber).length === 0}>Undo</button>
+          {isRoundEnded && <div className="mt-2 text-xs text-amber-300">Round ended. Resume/Edit to make changes.</div>}
         </div>
         <div className="mt-3 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
           <div>Round SG {formatSG(sgTotal)}</div>
@@ -313,13 +348,52 @@ export default function HolePage() {
             {Object.entries(SG_LABELS).map(([key, label]) => <div key={`hole-${key}`}>{label}: {formatSG(sgHoleByCategory[key as SGCategory] ?? 0)}</div>)}
           </div>
         </div>
+        <div className="mt-3 rounded-xl border p-3 text-xs" style={{ borderColor: "var(--border)" }}>
+          <div className="mb-2 text-sm font-semibold">Round Dashboard</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded border p-2" style={{ borderColor: "var(--border)" }}>
+              <div>FIR</div>
+              <div>Hole: {holeStats ? formatFlag(holeStats.fir) : "--"}</div>
+              <div>Round: {formatPct(roundStats.fir.pct)}</div>
+            </div>
+            <div className="rounded border p-2" style={{ borderColor: "var(--border)" }}>
+              <div>GIR</div>
+              <div>Hole: {holeStats ? formatFlag(holeStats.gir) : "--"}</div>
+              <div>Round: {formatPct(roundStats.gir.pct)}</div>
+            </div>
+            <div className="rounded border p-2" style={{ borderColor: "var(--border)" }}>
+              <div>Up&amp;Down</div>
+              <div>Hole: {holeStats ? formatFlag(holeStats.upAndDown) : "--"}</div>
+              <div>Round: {formatPct(roundStats.upAndDown.pct)}</div>
+            </div>
+            <div className="rounded border p-2" style={{ borderColor: "var(--border)" }}>
+              <div>Putts</div>
+              <div>Hole: {holeStats?.putts ?? 0}</div>
+              <div>Avg: {roundStats.puttsAvg === null ? "--" : roundStats.puttsAvg.toFixed(2)}</div>
+            </div>
+            <div className="rounded border p-2" style={{ borderColor: "var(--border)" }}>
+              <div>Strokes</div>
+              <div>Hole: {holeStats?.strokes ?? 0}</div>
+              <div>Total: {roundStats.strokesTotal}</div>
+            </div>
+          </div>
+        </div>
         {gpsError && <div className="mt-3 rounded-xl border p-3 text-sm text-amber-300" style={{ borderColor: "#92400e" }}>{gpsError} <button onClick={() => { setGpsPermissionDenied(false); setGpsError(null); setRetryCount((c) => c + 1); }}>Retry GPS</button></div>}
         {loadError && <div className="mt-3 rounded-xl border p-3 text-sm text-red-300" style={{ borderColor: "#7f1d1d" }}>{loadError}</div>}
       </div>
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3" style={{ background: "linear-gradient(to top, var(--bg-primary) 70%, transparent)" }}>
         <div className="mx-auto max-w-md">
-          <button className="mb-2 h-10 w-full rounded-xl border" style={{ borderColor: "var(--border)" }} onClick={() => router.push("/round-summary")}>Round Summary</button>
-          <button className="h-14 w-full rounded-xl border bg-green-500 text-green-950 disabled:opacity-40" style={{ borderColor: "#22c55e" }} onClick={handleLogShot} disabled={!mounted || !hole || !position || !sgBaseline || !isAccurateFix || !hasValidCurrentCoord || !hasValidGreenCenter}>Log Shot Here</button>
+          <button className="mb-2 h-10 w-full rounded-xl border" style={{ borderColor: "var(--border)" }} onClick={() => router.push("/round")}>Round Summary</button>
+          {isRoundEnded ? (
+            <button className="mb-2 h-10 w-full rounded-xl border" style={{ borderColor: "#22c55e" }} onClick={handleResumeEdit}>
+              Resume/Edit Round
+            </button>
+          ) : (
+            <button className="mb-2 h-10 w-full rounded-xl border" style={{ borderColor: "#7f1d1d", color: "#fca5a5" }} onClick={handleEndRound}>
+              End Round
+            </button>
+          )}
+          <button className="h-14 w-full rounded-xl border bg-green-500 text-green-950 disabled:opacity-40" style={{ borderColor: "#22c55e" }} onClick={handleLogShot} disabled={isRoundEnded || !mounted || !hole || !position || !sgBaseline || !isAccurateFix || !hasValidCurrentCoord || !hasValidGreenCenter}>Log Shot Here</button>
         </div>
       </div>
 
@@ -334,7 +408,7 @@ export default function HolePage() {
             <div className="mt-2 flex gap-2 overflow-x-auto">
               {CLUBS.map((club) => <button key={club} className="rounded border px-2 py-1 text-xs" style={{ borderColor: selectedClub === club ? "#22c55e" : "var(--border)" }} onClick={() => setSelectedClub(selectedClub === club ? null : club)}>{club}</button>)}
             </div>
-            <button className="mt-3 h-12 w-full rounded bg-green-500 text-green-950 disabled:opacity-40" onClick={handleConfirmLog} disabled={!selectedLie}>Log Shot</button>
+            <button className="mt-3 h-12 w-full rounded bg-green-500 text-green-950 disabled:opacity-40" onClick={handleConfirmLog} disabled={isRoundEnded || !selectedLie}>Log Shot</button>
           </div>
         </div>
       )}
@@ -350,7 +424,7 @@ export default function HolePage() {
             <div className="mt-1 grid grid-cols-6 gap-2">
               {[1, 2, 3, 4, 5, 6].map((n) => <button key={n} className="rounded border p-2" style={{ borderColor: puttCount === n ? "#22c55e" : "var(--border)" }} onClick={() => setPuttCount(n)}>{n}</button>)}
             </div>
-            <button className="mt-3 h-12 w-full rounded bg-green-500 text-green-950" onClick={handleSavePutts}>Save Putting</button>
+            <button className="mt-3 h-12 w-full rounded bg-green-500 text-green-950 disabled:opacity-40" onClick={handleSavePutts} disabled={isRoundEnded}>Save Putting</button>
           </div>
         </div>
       )}

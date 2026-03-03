@@ -10,6 +10,7 @@ export type HoleGps = {
 
 export type CourseGps = {
   holes: Record<string, HoleGps>;
+  parByHole?: Record<string, number>;
 };
 
 export type LieType = "fairway" | "rough" | "sand" | "green" | "penalty";
@@ -64,6 +65,7 @@ export type StrokeEvent = ShotEvent | PenaltyEvent | GreenEvent;
 export type Round = {
   id: string;
   started_at: string;
+  ended_at?: string;
   updated_at: string;
   tee_set_id: string;
   current_hole: number;

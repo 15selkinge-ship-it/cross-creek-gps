@@ -53,7 +53,7 @@ export default function Home() {
     if (round) router.push(`/hole/${round.current_hole}`);
   }
   function handleRoundSummary() {
-    if (round) router.push("/round-summary");
+    if (round) router.push("/round");
   }
   function handleExportRound() {
     if (!round) return;

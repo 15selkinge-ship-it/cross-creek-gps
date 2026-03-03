@@ -22,7 +22,9 @@ Open `http://localhost:3000`.
    - `Green` opens a putt-distance prompt in paces, then stores feet (`paces * 3`).
 6. Use header navigation for `Prev`, `Next`, and `Home`.
 7. On Home, tap `Export JSON` to download `cross-creek-round.json`.
-8. Tap `Clear Round` to remove the saved round.
+8. Tap `End Round` on a hole at any time to timestamp and lock the round, then view `/round`.
+9. Tap `Resume/Edit` from `/round` (or the hole footer) to unlock edits.
+10. Tap `Clear Round` to remove the saved round.
 
 ## Data Notes
 
@@ -39,4 +41,31 @@ Open `http://localhost:3000`.
 - Round-level SG aggregates are saved as:
   - `sg_total`
   - `sg_by_category` (`off_tee`, `approach`, `short_game`, `putting`, `penalty`)
-- Round summary is available at `/round-summary` with hole-by-hole strokes/SG/putting SG and category totals.
+- Round summary is available at `/round` (and alias `/round-summary`) with SG + dashboard totals and hole-by-hole rows.
+
+## Round Dashboard Metrics
+
+- Pars come from `data/course-gps.json` `parByHole` (fallback in `lib/stats.ts` is marked TODO).
+- `Strokes per hole`: sum of all `stroke_value` events on that hole (`shot` + `green` putts + `penalty`).
+- `Putts per hole`: latest `green` event `putts` for that hole (`0` if none).
+- `FIR` (par 4/5 only):
+  - Uses the first non-penalty tee-shot result (`end_lie`).
+  - If first tee shot is penalty, continues until a tee shot in play is found.
+  - Round denominator: completed par 4/5 holes with an in-play tee shot recorded.
+- `GIR`:
+  - Requires a `green` event.
+  - True when strokes before first `green` event are `<= par - 2` (putts excluded; penalty events still count as strokes).
+  - Round denominator: holes with a `green` event.
+- `Up & Down`:
+  - Applicable only when `GIR` is false and a `green` event exists.
+  - Attempt when last non-green shot before reaching green has `end_distance_yds <= 30`.
+  - Success when attempt is true and hole score is `<= par`.
+  - Round denominator: up-and-down attempts only.
+- `To Par`:
+  - Round to-par uses scored holes only (`strokes > 0`), so early-ended rounds are relative to holes played.
+
+## Current Data Limits
+
+- Hole completion is inferred by presence of a `green` event.
+- If `end_lie` or `end_distance_yds` is missing for relevant shots, FIR / Up & Down may be unknown.
+- If multiple `green` events exist on one hole, GIR uses the first green timestamp and putts use the latest stored green event.

@@ -1,5 +1,5 @@
 import RoundSummaryScreen from "@/components/RoundSummaryScreen";
 
-export default function RoundSummaryAliasPage() {
+export default function RoundPage() {
   return <RoundSummaryScreen />;
 }
