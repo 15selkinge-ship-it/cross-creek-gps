@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cross Creek Golf Tracker (V1)
 
-## Getting Started
+Mobile-first GPS golf round tracker built with Next.js App Router, TypeScript, and Tailwind CSS.
 
-First, run the development server:
+## How To Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How To Use
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. On Home (`/`), tap `Start Round` to begin a new round.
+2. Tap `Resume Round` to continue from the saved current hole.
+3. On `/hole/[n]`, allow location permissions so live distance to green updates.
+4. Tap `Log Shot Here` at the ball location to add a stroke event.
+5. Pick the lie in the modal:
+   - `Penalty` adds an immediate extra penalty stroke event (+1).
+   - `Green` opens a putt-distance prompt in paces, then stores feet (`paces * 3`).
+6. Use header navigation for `Prev`, `Next`, and `Home`.
+7. On Home, tap `Export JSON` to download `cross-creek-round.json`.
+8. Tap `Clear Round` to remove the saved round.
 
-## Learn More
+## Data Notes
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Course data loads client-side from `public/course.json`.
+- Round data is stored in `localStorage` key `cc_round_v1`.
+- Hole screen uses `navigator.geolocation.watchPosition` for live yardage.
