@@ -9,7 +9,7 @@ import { getStoredRound, saveRound } from "@/lib/round-storage";
 import { emptySGTotals, loadSGBaseline, recalculateRoundSG, type SGBaseline } from "@/lib/sg";
 import { buildRoundStats, resolveParByHole } from "@/lib/stats";
 import type {
-  Coordinate, CourseGps, HoleGps, LieType, Round,
+  Coordinate, CourseGps, GreenEvent, HoleGps, LieType, Round,
   SGCategory, SGDebugInfo, ShotEvent, StartLieType, StrokeEvent,
 } from "@/lib/types";
 
@@ -73,6 +73,9 @@ function holeCategorySG(r: Round | null, h: number): Record<SGCategory, number> 
   if (!r) return t;
   for (const e of r.events) { if (e.hole === h && e.sg_category) t[e.sg_category] += e.sg ?? 0; }
   return t;
+}
+function isGreenEvent(event: StrokeEvent): event is GreenEvent {
+  return event.type === "green";
 }
 
 // ── Score celebration overlay ──────────────────────────────────────────────
@@ -283,7 +286,21 @@ export default function HolePage() {
     if (!round || !pendingShotDraft) return setPuttModalOpen(false);
     const paces = Number(puttPaces);
     if (!Number.isFinite(paces) || paces < 0) return;
-    updateRound({ ...round, events: [...round.events, { id: uid(), type: "green", hole: holeNumber, first_putt_paces: paces, first_putt_ft: pacesToFeet(paces), putts: puttCount, stroke_value: puttCount, timestamp: nowIso() }] });
+    const startFt = pacesToFeet(paces);
+    const puttEvent = {
+      id: uid(),
+      type: "green" as const,
+      hole: holeNumber,
+      start_putt_distance_ft: startFt,
+      start_putt_distance_paces: paces,
+      first_putt_paces: paces,
+      first_putt_ft: startFt,
+      putts: puttCount,
+      stroke_value: puttCount,
+      timestamp: nowIso(),
+      ...(position ? { gps_lat: position.lat, gps_lng: position.lng } : {}),
+    };
+    updateRound({ ...round, events: [...round.events, puttEvent] });
     setPuttModalOpen(false); setPending(null);
   }
 
@@ -331,6 +348,18 @@ export default function HolePage() {
   const showSgDebug   = process.env.NEXT_PUBLIC_DEBUG_SG === "1";
   const holeEvents    = round?.events.filter(e => e.hole === holeNumber) ?? [];
   const sgDebugRows   = holeEvents.filter(e => e.sg_debug).map((e, i) => ({ index: i + 1, category: e.sg_category ?? "-", debug: e.sg_debug as SGDebugInfo }));
+  const puttingDebugLines = holeEvents
+    .filter((event): event is GreenEvent => isGreenEvent(event) && Boolean(event.sg_debug))
+    .map((event, i) => {
+      const usedDistanceFt = Number.isFinite(event.start_putt_distance_ft) ? event.start_putt_distance_ft : event.first_putt_ft;
+      return {
+        id: `${event.id}-${i}`,
+        usedDistanceFt,
+        expectedStrokes: event.sg_debug?.e_start ?? 0,
+        putts: event.putts,
+        sgPutt: event.sg ?? 0,
+      };
+    });
   const scoreInfo     = getScoreInfo(strokesThisHole, par);
   const canLog        = !isRoundEnded && mounted && !!hole && !!position && !!sgBaseline && isAccurateFix && hasValidCur && hasValidGC;
 
@@ -495,6 +524,15 @@ export default function HolePage() {
                   </tbody>
                 </table>
               </div>
+              {!!puttingDebugLines.length && (
+                <div style={{ marginTop: 10, fontFamily: "monospace" }}>
+                  {puttingDebugLines.map((line, i) => (
+                    <div key={line.id}>
+                      PUTT#{i + 1}: used distance_ft={formatDebugValue(line.usedDistanceFt)}, expected strokes={formatDebugValue(line.expectedStrokes)}, putts={line.putts}, SG_putt={formatSG(line.sgPutt)}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -68,9 +68,13 @@ export type GreenEvent = {
   id: string;
   type: "green";
   hole: number;
+  start_putt_distance_ft: number;
+  start_putt_distance_paces: number;
   first_putt_paces: number;
   first_putt_ft: number;
   putts: number;
+  gps_lat?: number;
+  gps_lng?: number;
   stroke_value: number;
   timestamp: string;
 } & Partial<SGMeta>;

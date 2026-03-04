@@ -228,7 +228,8 @@ function computeShotSG(baseline: SGBaseline, shot: ShotEvent, category: SGCatego
 }
 
 function computePuttingSG(baseline: SGBaseline, event: GreenEvent): SGShotBreakdown {
-  const startFt = Math.max(0, event.first_putt_ft);
+  const rawStartFt = Number.isFinite(event.start_putt_distance_ft) ? event.start_putt_distance_ft : event.first_putt_ft;
+  const startFt = Math.max(0, rawStartFt);
   const putts = Math.max(0, event.putts);
   const eStart = expectedStrokes(baseline, "green", startFt);
   const sg = putts === 0 ? 0 : round2(eStart - putts);
