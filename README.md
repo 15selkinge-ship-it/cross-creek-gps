@@ -11,6 +11,45 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## AI Voice Caddie Setup
+
+The app includes an AI voice caddie that listens to your situation, analyzes your round history, and speaks back a club recommendation with a pattern insight.
+
+### 1. Add your OpenAI API key
+
+Copy `.env.example` to `.env.local` and fill in your key:
+
+```bash
+cp .env.example .env.local
+```
+
+Then edit `.env.local`:
+
+```
+OPENAI_API_KEY=sk-...your-key-here...
+```
+
+The key is used server-side only — it is never sent to the browser.
+
+### 2. Voice input browser support
+
+- **Best experience**: Chrome on Android. Full Web Speech API support with real-time transcript preview.
+- **iPhone Safari**: Voice input may be inconsistent or unavailable depending on iOS version. A typed text input fallback is always shown.
+- **Desktop Chrome**: Works well for testing.
+- The Web Speech API requires **HTTPS** in production. Vercel handles this automatically.
+
+### 3. Typed fallback
+
+If voice input is not supported or you prefer typing, use the text field below the Record button. Type your situation and press Enter or tap Send. The full AI analysis and voice readback work identically.
+
+### 4. Using the caddie
+
+1. On any hole screen, scroll past the GPS yardage to the **AI Caddie** panel.
+2. Tap **TAP TO SPEAK** and describe your situation naturally — e.g. "Fairway, 165 yards, slight downhill, pin right."
+3. Tap again to send. The caddie will read the recommendation aloud and show advice cards.
+4. Use the **SOUND ON / MUTED** toggle to control voice output.
+5. When enough round history exists, a gold **Pattern Insight** card appears with specific feedback on your tendencies.
+
 ## How To Use
 
 1. On Home (`/`), tap `Start Round` to begin a new round.

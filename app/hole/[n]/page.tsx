@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AccuracyPill from "@/components/AccuracyPill";
 import ScorecardBar from "@/components/ScorecardBar";
+import VoiceCaddiePanel from "@/components/VoiceCaddiePanel";
 import { fetchCourse } from "@/lib/course";
 import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
@@ -418,6 +419,16 @@ export default function HolePage() {
             )}
             {!waitingFix && !hasValidGC && <div style={{ color: "#166534", fontSize: "0.75rem", marginTop: 8 }}>Green center coordinates unavailable.</div>}
           </div>
+
+          {/* AI voice caddie */}
+          <VoiceCaddiePanel
+            currentHole={holeNumber}
+            par={par}
+            strokesThisHole={strokesThisHole}
+            sgTotal={sgTotal}
+            roundEvents={round?.events ?? []}
+            gpsDistanceYards={distYards}
+          />
 
           {/* score this hole */}
           <div style={{ background: scoreBg, border: `1px solid ${scoreBorder}`, boxShadow: scoreGlow, borderRadius: 16, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", transition: "background 0.5s, border-color 0.5s, box-shadow 0.5s" }}>
