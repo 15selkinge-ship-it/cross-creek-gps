@@ -150,6 +150,7 @@ export default function VoiceCaddiePanel({
   const [holeTranscripts, setHoleTranscripts] = useState<string[]>([]);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     setSpeechSupported(!!getSpeechRecognition());
@@ -203,9 +204,12 @@ export default function VoiceCaddiePanel({
     if (isRecording) {
       stopRecording();
     } else {
-      // Prime speech synthesis within the user gesture for mobile Chrome reliability
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(" ");
+        utt.volume = 0;
+        window.speechSynthesis.speak(utt);
+        uttRef.current = new SpeechSynthesisUtterance("");
       }
       startRecording();
     }
@@ -253,8 +257,16 @@ export default function VoiceCaddiePanel({
         const caddie = data as CaddieResponse;
         setCaddieResponse(caddie);
 
-        // Speak the recommendation (delayed for mobile Chrome speechSynthesis reliability)
-        setTimeout(() => speak(buildSpeechText(caddie.caddie_recommendation), muted), 50);
+        // Speak using pre-created utterance (maintains user gesture chain on Chrome Android)
+        if (!muted && uttRef.current && typeof window !== "undefined" && window.speechSynthesis) {
+          uttRef.current.text = buildSpeechText(caddie.caddie_recommendation);
+          uttRef.current.rate = 1.05;
+          uttRef.current.pitch = 1;
+          uttRef.current.volume = 1;
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(uttRef.current);
+          uttRef.current = null;
+        }
 
         // Auto-log hole from voice if hole_result with inferred shots
         if (

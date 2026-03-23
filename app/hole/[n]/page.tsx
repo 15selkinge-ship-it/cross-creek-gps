@@ -328,6 +328,8 @@ export default function HolePage() {
   }
 
   function handleVoiceHoleComplete(inferredShots: InferredShot[], holeScore: number) {
+    console.log("[voice] handleVoiceHoleComplete fired, hole:", holeNumber, "shots:", inferredShots.length, "score:", holeScore);
+    const capturedHole = holeNumber;
     const ar = ensureRound();
     if (!ar) return;
 
@@ -340,7 +342,7 @@ export default function HolePage() {
         newEvents.push({
           id: uid(),
           type: "green",
-          hole: holeNumber,
+          hole: capturedHole,
           start_putt_distance_ft: puttFt,
           start_putt_distance_paces: puttFt / 3,
           first_putt_paces: puttFt / 3,
@@ -357,7 +359,7 @@ export default function HolePage() {
         newEvents.push({
           id: uid(),
           type: "shot",
-          hole: holeNumber,
+          hole: capturedHole,
           stroke_value: 1,
           timestamp: now,
           lat: isFirstShot && teeCoord ? teeCoord.lat : 0,
@@ -381,18 +383,20 @@ export default function HolePage() {
       console.warn(`[voice] inferred ${computedStrokes} strokes but hole_score=${holeScore}`);
     }
 
-    const eventsOtherHoles = ar.events.filter(e => e.hole !== holeNumber);
-    const updatedRound = { ...ar, current_hole: holeNumber, events: [...eventsOtherHoles, ...newEvents] };
+    const eventsOtherHoles = ar.events.filter(e => e.hole !== capturedHole);
+    const updatedRound = { ...ar, current_hole: capturedHole, events: [...eventsOtherHoles, ...newEvents] };
     updateRound(updatedRound);
+    console.log("[voice] round saved, events this hole:", updatedRound.events.filter(e => e.hole === capturedHole).length);
 
     const info = getScoreInfo(holeScore, par);
     if (info) {
       setTimeout(() => setCelebration(info), 200);
     }
 
-    const nextHole = holeNumber + 1;
-    if (nextHole <= 18) {
-      setTimeout(() => handleGoToHole(nextHole), 2800);
+    if (capturedHole + 1 <= 18) {
+      setTimeout(() => {
+        router.push(`/hole/${capturedHole + 1}`);
+      }, 2800);
     } else {
       setTimeout(() => router.push("/round"), 2800);
     }
