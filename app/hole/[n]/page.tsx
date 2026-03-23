@@ -378,10 +378,50 @@ export default function HolePage() {
       }
     }
 
-    const computedStrokes = newEvents.reduce((s, e) => s + e.stroke_value, 0);
-    if (computedStrokes !== holeScore) {
-      console.warn(`[voice] inferred ${computedStrokes} strokes but hole_score=${holeScore}`);
+    const inferredTotal = newEvents.reduce((sum, e) => sum + e.stroke_value, 0);
+
+    if (inferredTotal !== holeScore) {
+      const diff = holeScore - inferredTotal;
+      if (diff > 0) {
+        // Short — insert generic fairway shots before the last event (green/putt)
+        for (let i = 0; i < diff; i++) {
+          newEvents.splice(newEvents.length - 1, 0, {
+            id: uid(),
+            type: "shot",
+            hole: capturedHole,
+            stroke_value: 1,
+            timestamp: now,
+            lat: 0,
+            lng: 0,
+            start_lie: "fairway" as const,
+            end_lie: "fairway" as const,
+            distance_from_prev_yd: 0,
+            start_distance_yds: 0,
+            end_distance_yds: 0,
+            notes: "voice-inferred",
+          } as ShotEvent);
+        }
+      } else if (diff < 0) {
+        // Too many — remove voice-inferred shots from the middle first
+        let toRemove = Math.abs(diff);
+        for (let i = newEvents.length - 2; i >= 1 && toRemove > 0; i--) {
+          if (newEvents[i].type === "shot" && (newEvents[i] as ShotEvent).notes === "voice-inferred") {
+            newEvents.splice(i, 1);
+            toRemove--;
+          }
+        }
+        // Then remove any non-green shots from the middle if still over
+        for (let i = newEvents.length - 2; i >= 1 && toRemove > 0; i--) {
+          if (newEvents[i].type === "shot") {
+            newEvents.splice(i, 1);
+            toRemove--;
+          }
+        }
+      }
     }
+
+    const finalTotal = newEvents.reduce((sum, e) => sum + e.stroke_value, 0);
+    console.log("[voice] final stroke count:", finalTotal, "stated score:", holeScore, "match:", finalTotal === holeScore);
 
     const eventsOtherHoles = ar.events.filter(e => e.hole !== capturedHole);
     const updatedRound = { ...ar, current_hole: capturedHole, events: [...eventsOtherHoles, ...newEvents] };
