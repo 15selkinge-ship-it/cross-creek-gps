@@ -13,6 +13,18 @@ interface CaddieRequest {
   holeNumber?: number;
 }
 
+interface InferredShot {
+  shot_number: number;
+  club: string | null;
+  start_lie: "tee" | "fairway" | "rough" | "sand" | "green" | "penalty";
+  end_lie: "fairway" | "rough" | "sand" | "green" | "penalty";
+  estimated_distance_yards: number | null;
+  estimated_distance_to_pin_after_yards: number | null;
+  is_putt: boolean;
+  putt_distance_feet: number | null;
+  putt_count: number | null;
+}
+
 interface CaddieResponse {
   transcript_type: string;
   shot_context: {
@@ -47,6 +59,7 @@ interface CaddieResponse {
     around_green: number | null;
     putting: number | null;
   };
+  inferred_shots?: InferredShot[];
 }
 
 interface ErrorResponse {
@@ -109,7 +122,19 @@ Required JSON response shape:
 }
 
 When pattern_insight.present is false, set message to null.
-When shot_context or caddie_recommendation fields are unknown, set them to null.`;
+When shot_context or caddie_recommendation fields are unknown, set them to null.
+
+When transcript_type is "hole_result", populate inferred_shots with one entry per shot or putting group described or implied.
+For putts, set is_putt: true, putt_count to the number of putts, and putt_distance_feet to the estimated first putt distance in feet (e.g. "two putt" from typical approach = ~20 ft).
+For full shots, set is_putt: false, estimate distances from context and GPS distance provided.
+start_lie for the first shot is always "tee" on par 4s and par 5s, "tee" on par 3s.
+Chain the shots logically: end_lie of shot N becomes start_lie of shot N+1.
+Leave fields null when genuinely unknown rather than guessing wildly.
+Example: "Par. Two putt from the fairway, 150 out" on a par 4 should produce:
+  shot 1: tee -> fairway, driver, ~300 yards, distance_to_pin_after ~150
+  shot 2: fairway -> green, estimated iron, ~150 yards, distance_to_pin_after 0
+  shot 3 (putting group): green, is_putt true, putt_count 2, putt_distance_feet 20
+For all other transcript_type values, set inferred_shots to [].`;
 
 export async function POST(req: NextRequest): Promise<NextResponse<CaddieResponse | ErrorResponse>> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -160,7 +185,7 @@ Analyze the round events array for patterns. Return JSON only.`.trim();
           { role: "user", content: userMessage },
         ],
         temperature: 0.3,
-        max_tokens: 600,
+        max_tokens: 900,
         response_format: { type: "json_object" },
       }),
     });
@@ -199,6 +224,7 @@ Analyze the round events array for patterns. Return JSON only.`.trim();
         around_green: null,
         putting: null,
       },
+      inferred_shots: parsed.inferred_shots ?? [],
     };
 
     return NextResponse.json(result);

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AccuracyPill from "@/components/AccuracyPill";
 import ScorecardBar from "@/components/ScorecardBar";
-import VoiceCaddiePanel from "@/components/VoiceCaddiePanel";
+import VoiceCaddiePanel, { type InferredShot } from "@/components/VoiceCaddiePanel";
 import { fetchCourse } from "@/lib/course";
 import { isZeroCoordinate, pacesToFeet, safeDistanceYards } from "@/lib/geo";
 import { getStoredRound, saveRound } from "@/lib/round-storage";
@@ -327,6 +327,77 @@ export default function HolePage() {
     updateRound({ ...round, ended_at: undefined, current_hole: holeNumber });
   }
 
+  function handleVoiceHoleComplete(inferredShots: InferredShot[], holeScore: number) {
+    const ar = ensureRound();
+    if (!ar) return;
+
+    const newEvents: StrokeEvent[] = [];
+    const now = nowIso();
+
+    for (const shot of inferredShots) {
+      if (shot.is_putt && shot.putt_count != null) {
+        const puttFt = shot.putt_distance_feet ?? 20;
+        newEvents.push({
+          id: uid(),
+          type: "green",
+          hole: holeNumber,
+          start_putt_distance_ft: puttFt,
+          start_putt_distance_paces: puttFt / 3,
+          first_putt_paces: puttFt / 3,
+          first_putt_ft: puttFt,
+          putts: shot.putt_count,
+          stroke_value: shot.putt_count,
+          timestamp: now,
+        } as StrokeEvent);
+      } else {
+        const isFirstShot = shot.shot_number === 1;
+        const teeCoord = hole?.tee ? normalizeCoordinate(hole.tee) : null;
+        const greenCoord = hole?.greenCenter ? normalizeCoordinate(hole.greenCenter) : null;
+
+        newEvents.push({
+          id: uid(),
+          type: "shot",
+          hole: holeNumber,
+          stroke_value: 1,
+          timestamp: now,
+          lat: isFirstShot && teeCoord ? teeCoord.lat : 0,
+          lng: isFirstShot && teeCoord ? teeCoord.lng : 0,
+          start_lie: shot.start_lie ?? "tee",
+          end_lie: shot.end_lie ?? "fairway",
+          notes: shot.club ?? undefined,
+          distance_from_prev_yd: shot.estimated_distance_yards ?? 0,
+          start_distance_yds: shot.estimated_distance_to_pin_after_yards != null
+            ? shot.estimated_distance_to_pin_after_yards + (shot.estimated_distance_yards ?? 0)
+            : (greenCoord && isFirstShot && teeCoord
+                ? safeDistanceYards(teeCoord, greenCoord) ?? 0
+                : 0),
+          end_distance_yds: shot.estimated_distance_to_pin_after_yards ?? 0,
+        } as ShotEvent);
+      }
+    }
+
+    const computedStrokes = newEvents.reduce((s, e) => s + e.stroke_value, 0);
+    if (computedStrokes !== holeScore) {
+      console.warn(`[voice] inferred ${computedStrokes} strokes but hole_score=${holeScore}`);
+    }
+
+    const eventsOtherHoles = ar.events.filter(e => e.hole !== holeNumber);
+    const updatedRound = { ...ar, current_hole: holeNumber, events: [...eventsOtherHoles, ...newEvents] };
+    updateRound(updatedRound);
+
+    const info = getScoreInfo(holeScore, par);
+    if (info) {
+      setTimeout(() => setCelebration(info), 200);
+    }
+
+    const nextHole = holeNumber + 1;
+    if (nextHole <= 18) {
+      setTimeout(() => handleGoToHole(nextHole), 2800);
+    } else {
+      setTimeout(() => router.push("/round"), 2800);
+    }
+  }
+
   const currentCoord  = position ? normalizeCoordinate({ lat: position.lat, lng: position.lng }) : null;
   const greenCenter   = hole?.greenCenter ? normalizeCoordinate(hole.greenCenter) : null;
   const isAccurateFix = Boolean(position && position.accuracy <= MAX_GPS_ACCURACY_METERS);
@@ -428,6 +499,7 @@ export default function HolePage() {
             sgTotal={sgTotal}
             roundEvents={round?.events ?? []}
             gpsDistanceYards={distYards}
+            onHoleComplete={handleVoiceHoleComplete}
           />
 
           {/* score this hole */}

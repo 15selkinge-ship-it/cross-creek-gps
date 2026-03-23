@@ -4,6 +4,18 @@ import type { StrokeEvent } from "@/lib/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+export interface InferredShot {
+  shot_number: number;
+  club: string | null;
+  start_lie: "tee" | "fairway" | "rough" | "sand" | "green" | "penalty";
+  end_lie: "fairway" | "rough" | "sand" | "green" | "penalty";
+  estimated_distance_yards: number | null;
+  estimated_distance_to_pin_after_yards: number | null;
+  is_putt: boolean;
+  putt_distance_feet: number | null;
+  putt_count: number | null;
+}
+
 interface CaddieRecommendation {
   club: string | null;
   target: string | null;
@@ -46,6 +58,7 @@ interface CaddieResponse {
     around_green: number | null;
     putting: number | null;
   };
+  inferred_shots?: InferredShot[];
 }
 
 interface HistoryEntry {
@@ -62,6 +75,7 @@ interface VoiceCaddiePanelProps {
   sgTotal: number;
   roundEvents: StrokeEvent[];
   gpsDistanceYards: number | null;
+  onHoleComplete?: (inferredShots: InferredShot[], holeScore: number) => void;
 }
 
 // ── Web Speech API — minimal local types (not in standard DOM lib) ─────────
@@ -121,6 +135,7 @@ export default function VoiceCaddiePanel({
   sgTotal,
   roundEvents,
   gpsDistanceYards,
+  onHoleComplete,
 }: VoiceCaddiePanelProps) {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -182,6 +197,10 @@ export default function VoiceCaddiePanel({
     if (isRecording) {
       stopRecording();
     } else {
+      // Prime speech synthesis within the user gesture for mobile Chrome reliability
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
@@ -224,8 +243,17 @@ export default function VoiceCaddiePanel({
         const caddie = data as CaddieResponse;
         setCaddieResponse(caddie);
 
-        // Speak the recommendation
-        speak(buildSpeechText(caddie.caddie_recommendation), muted);
+        // Speak the recommendation (delayed for mobile Chrome speechSynthesis reliability)
+        setTimeout(() => speak(buildSpeechText(caddie.caddie_recommendation), muted), 50);
+
+        // Auto-log hole from voice if hole_result with inferred shots
+        if (
+          caddie.transcript_type === "hole_result" &&
+          caddie.round_update?.hole_score != null &&
+          (caddie.inferred_shots?.length ?? 0) > 0
+        ) {
+          setTimeout(() => onHoleComplete?.(caddie.inferred_shots!, caddie.round_update!.hole_score!), 100);
+        }
 
         // Add to history (keep last 5)
         setHistory(prev => [
@@ -247,7 +275,7 @@ export default function VoiceCaddiePanel({
         setLoading(false);
       }
     },
-    [currentHole, gpsDistanceYards, muted, par, roundEvents, sgTotal, strokesThisHole]
+    [currentHole, gpsDistanceYards, muted, onHoleComplete, par, roundEvents, sgTotal, strokesThisHole]
   );
 
   // Auto-submit when recording stops and transcript is non-empty
