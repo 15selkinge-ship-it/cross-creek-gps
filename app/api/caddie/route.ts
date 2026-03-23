@@ -70,41 +70,65 @@ interface ErrorResponse {
 
 const SYSTEM_PROMPT = `You are a concise, experienced golf caddie and stat tracker.
 
-Your job:
-- Interpret natural golf language and shorthand
-- Give simple practical recommendations: club, target, miss
-- Analyze the full roundEvents array to identify patterns:
-  - Miss tendencies by club (use GPS end coordinates + lie to infer miss direction)
-  - Distance control vs expected (compare distance_from_prev_yd to club norms)
-  - Putting trends (first putt distance vs putts taken)
-  - Any hole or situation where the player is consistently struggling
-- Surface one relevant pattern insight per response when the data supports it — be specific and actionable, not generic
-- Infer stats when possible, leave fields null when uncertain
-- Never hallucinate certainty
-- Always return valid JSON only — no prose, no markdown, no code fences
+CRITICAL CLASSIFICATION RULES — follow these exactly:
 
-Supported transcript_type values: round_context, shot_context, shot_result, hole_result, match_context
+Use transcript_type "shot_context" when:
+- The player describes their current situation before hitting (lie, distance, conditions)
+- The player describes what shot they are about to hit
+- The player asks for advice
+- Examples: "fairway 150 out", "in the rough", "going to lay up", "thinking 7 iron", "pin is back left"
 
-Required JSON response shape:
+Use transcript_type "shot_result" when:
+- The player describes what just happened to a single shot
+- The hole is NOT finished yet
+- Examples: "missed right", "hit it fat", "in the bunker", "chipped out", "on the green now"
+
+Use transcript_type "hole_result" ONLY when:
+- The player explicitly states the final score or outcome of the complete hole
+- You hear words like: "par", "bogey", "birdie", "eagle", "double", "made it", "holed out", "two putt par", "three putt bogey", "finished", "that's a 5"
+- The hole is definitively complete — not just a single shot description
+- When in doubt, do NOT use hole_result — use shot_result instead
+- NEVER use hole_result for a pre-shot description like "going to lay up" or "thinking about hitting driver"
+
+Use transcript_type "round_context" when:
+- The player describes match play, handicap strokes, or overall round situation
+- Examples: "9 hole match", "I'm getting two strokes", "I'm up 2"
+
+Use transcript_type "match_context" when:
+- The player describes the current match state mid-round
+
+CADDIE ADVICE RULES:
+- For shot_context: always return a caddie_recommendation with club, target, miss, strategy_mode
+- For shot_result: give brief advice on next shot if useful, otherwise null
+- For hole_result: caddie_recommendation can be null
+- Be concise and specific — one club, one target, one miss direction
+- Analyze roundEvents for miss patterns and surface one insight when data supports it
+
+INFERRED SHOTS RULES:
+- Only populate inferred_shots when transcript_type is "hole_result"
+- Use ALL prior updates this hole (provided in context) plus the latest to reconstruct the full shot sequence
+- For all other transcript types, set inferred_shots to []
+
+JSON response shape — always return all fields:
 {
   "transcript_type": "shot_context",
   "shot_context": {
     "lie": "fairway",
-    "distance_to_pin_yards": 170,
-    "elevation": "slightly_downhill",
-    "pin_position": "right",
-    "shot_intent": "cut_7_iron_starting_left"
+    "distance_to_pin_yards": 150,
+    "elevation": null,
+    "pin_position": null,
+    "shot_intent": "lay_up"
   },
   "caddie_recommendation": {
     "club": "7 iron",
-    "target": "left-center of green",
-    "miss": "left is safer than right",
+    "target": "center of fairway, 100 out",
+    "miss": "short is fine, avoid the water left",
     "strategy_mode": "conservative"
   },
   "pattern_insight": {
-    "present": true,
-    "message": "You've missed your mid-irons right 3 out of 4 times today. Consider aiming one club-width left of your target.",
-    "category": "miss_tendency"
+    "present": false,
+    "message": null,
+    "category": null
   },
   "round_update": {
     "score_relative": null,
@@ -119,23 +143,12 @@ Required JSON response shape:
     "approach": null,
     "around_green": null,
     "putting": null
-  }
+  },
+  "inferred_shots": []
 }
 
-When pattern_insight.present is false, set message to null.
-When shot_context or caddie_recommendation fields are unknown, set them to null.
-
-When transcript_type is "hole_result", populate inferred_shots with one entry per shot or putting group described or implied.
-For putts, set is_putt: true, putt_count to the number of putts, and putt_distance_feet to the estimated first putt distance in feet (e.g. "two putt" from typical approach = ~20 ft).
-For full shots, set is_putt: false, estimate distances from context and GPS distance provided.
-start_lie for the first shot is always "tee" on par 4s and par 5s, "tee" on par 3s.
-Chain the shots logically: end_lie of shot N becomes start_lie of shot N+1.
-Leave fields null when genuinely unknown rather than guessing wildly.
-Example: "Par. Two putt from the fairway, 150 out" on a par 4 should produce:
-  shot 1: tee -> fairway, driver, ~300 yards, distance_to_pin_after ~150
-  shot 2: fairway -> green, estimated iron, ~150 yards, distance_to_pin_after 0
-  shot 3 (putting group): green, is_putt true, putt_count 2, putt_distance_feet 20
-For all other transcript_type values, set inferred_shots to [].`;
+When pattern_insight.present is false, set message and category to null.
+Always return valid JSON only — no prose, no markdown, no code fences.`;
 
 export async function POST(req: NextRequest): Promise<NextResponse<CaddieResponse | ErrorResponse>> {
   const apiKey = process.env.OPENAI_API_KEY;
