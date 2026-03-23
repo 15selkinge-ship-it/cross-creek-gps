@@ -91,6 +91,23 @@ Use transcript_type "hole_result" ONLY when:
 - When in doubt, do NOT use hole_result — use shot_result instead
 - NEVER use hole_result for a pre-shot description like "going to lay up" or "thinking about hitting driver"
 
+Also use hole_result when:
+- The player states putts taken, even without an explicit score word
+- Examples that should ALL trigger hole_result:
+  - "2 putt"
+  - "two putt"
+  - "three putt"
+  - "putted from 20 feet, 2 putt"
+  - "made the putt"
+  - "missed the putt, 3 putt"
+  - "tapped in"
+  - "holed it from off the green"
+- Putting is always the final act of a hole — if the player describes putts taken, the hole is complete
+- When hole_result is triggered by a putt statement and no explicit total score is given, infer hole_score as: strokesThisHole (provided in context) + putts taken
+- Use the priorTranscripts to reconstruct all shots that happened before the putting
+
+If you are unsure whether something is shot_result or hole_result, ask: does this statement describe the final act of completing the hole? Putting always does. A chip or approach shot does not unless the player says they holed it.
+
 Use transcript_type "round_context" when:
 - The player describes match play, handicap strokes, or overall round situation
 - Examples: "9 hole match", "I'm getting two strokes", "I'm up 2"
