@@ -147,12 +147,18 @@ export default function VoiceCaddiePanel({
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [holeTranscripts, setHoleTranscripts] = useState<string[]>([]);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   useEffect(() => {
     setSpeechSupported(!!getSpeechRecognition());
   }, []);
+
+  useEffect(() => {
+    setHoleTranscripts([]);
+    setCaddieResponse(null);
+  }, [currentHole]);
 
   const stopRecording = useCallback(() => {
     recognitionRef.current?.stop();
@@ -213,6 +219,9 @@ export default function VoiceCaddiePanel({
         return;
       }
 
+      const updatedTranscripts = [...holeTranscripts, trimmed];
+      setHoleTranscripts(updatedTranscripts);
+
       setLoading(true);
       setError(null);
       setCaddieResponse(null);
@@ -223,6 +232,7 @@ export default function VoiceCaddiePanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             transcript: trimmed,
+            priorTranscripts: updatedTranscripts.slice(0, -1),
             gpsDistanceYards,
             currentHole,
             par,
@@ -252,6 +262,7 @@ export default function VoiceCaddiePanel({
           caddie.round_update?.hole_score != null &&
           (caddie.inferred_shots?.length ?? 0) > 0
         ) {
+          setHoleTranscripts([]);
           setTimeout(() => onHoleComplete?.(caddie.inferred_shots!, caddie.round_update!.hole_score!), 100);
         }
 
@@ -275,7 +286,7 @@ export default function VoiceCaddiePanel({
         setLoading(false);
       }
     },
-    [currentHole, gpsDistanceYards, muted, onHoleComplete, par, roundEvents, sgTotal, strokesThisHole]
+    [currentHole, gpsDistanceYards, holeTranscripts, muted, onHoleComplete, par, roundEvents, sgTotal, strokesThisHole]
   );
 
   // Auto-submit when recording stops and transcript is non-empty
@@ -346,6 +357,12 @@ export default function VoiceCaddiePanel({
             >
               {isRecording ? "● RECORDING — TAP TO SEND" : loading ? "THINKING..." : "TAP TO SPEAK"}
             </button>
+
+            {holeTranscripts.length > 0 && (
+              <div style={{ marginTop: 6, fontSize: "0.72rem", color: "#86efac", opacity: 0.7, textAlign: "center" }}>
+                {holeTranscripts.length} update{holeTranscripts.length > 1 ? "s" : ""} this hole
+              </div>
+            )}
 
             {(isRecording || transcript) && (
               <div style={{

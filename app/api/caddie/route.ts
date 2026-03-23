@@ -4,6 +4,7 @@ export const maxDuration = 30;
 
 interface CaddieRequest {
   transcript: string;
+  priorTranscripts?: string[];
   gpsDistanceYards?: number | null;
   currentHole?: number;
   par?: number;
@@ -149,11 +150,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<CaddieRespons
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { transcript, gpsDistanceYards, currentHole, par, strokesThisHole, sgTotal, roundEvents } = body;
+  const { transcript, priorTranscripts, gpsDistanceYards, currentHole, par, strokesThisHole, sgTotal, roundEvents } = body;
 
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return NextResponse.json({ error: "transcript is required" }, { status: 400 });
   }
+
+  const priorContext = (priorTranscripts && priorTranscripts.length > 0)
+    ? `\nPrior updates this hole:\n${priorTranscripts.map((t, i) => `  ${i + 1}. "${t}"`).join("\n")}`
+    : "";
 
   const userMessage = `
 Current situation:
@@ -162,13 +167,15 @@ Current situation:
 - GPS distance to pin: ${gpsDistanceYards != null ? `${gpsDistanceYards} yards` : "unavailable"}
 - Strokes this hole: ${strokesThisHole ?? 0}
 - Round strokes gained total: ${sgTotal ?? 0}
-
-Player said: "${transcript.trim()}"
+${priorContext}
+Latest update: "${transcript.trim()}"
 
 Full round events (for pattern analysis):
 ${JSON.stringify(roundEvents ?? [], null, 0)}
 
-Analyze the round events array for patterns. Return JSON only.`.trim();
+Consider ALL updates this hole together when determining transcript_type and building inferred_shots. If the latest update completes the hole story (e.g. "got up and down for par", "made the putt", "two putt bogey"), set transcript_type to "hole_result" and reconstruct ALL shots across all updates into inferred_shots. Otherwise set transcript_type to "shot_context" or "shot_result" and give caddie advice for the current situation.
+
+Return JSON only.`.trim();
 
   let raw = "";
   try {
