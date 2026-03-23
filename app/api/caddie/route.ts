@@ -61,6 +61,7 @@ interface CaddieResponse {
     putting: number | null;
   };
   inferred_shots?: InferredShot[];
+  audio_base64?: string | null;
 }
 
 interface ErrorResponse {
@@ -246,6 +247,51 @@ Return JSON only.`.trim();
       },
       inferred_shots: parsed.inferred_shots ?? [],
     };
+
+    // Build TTS text and generate audio server-side
+    function buildTTSText(res: CaddieResponse): string {
+      const rec = res.caddie_recommendation;
+      const insight = res.pattern_insight;
+      const parts: string[] = [];
+      if (rec?.club) parts.push(rec.club + ".");
+      if (rec?.target) parts.push("Aim " + rec.target + ".");
+      if (rec?.miss) parts.push("Miss " + rec.miss + ".");
+      if (insight?.present && insight.message) parts.push(insight.message);
+      return parts.join(" ").trim();
+    }
+
+    const ttsText = buildTTSText(result);
+    let audioBase64: string | null = null;
+
+    if (ttsText) {
+      try {
+        const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "tts-1",
+            voice: "onyx",
+            input: ttsText,
+            response_format: "mp3",
+          }),
+        });
+
+        if (ttsResponse.ok) {
+          const audioBuffer = await ttsResponse.arrayBuffer();
+          audioBase64 = Buffer.from(audioBuffer).toString("base64");
+        } else {
+          console.error("[tts] failed:", ttsResponse.status);
+        }
+      } catch (err) {
+        console.error("[tts] error:", err);
+        // Non-fatal — caddie response still returns, just without audio
+      }
+    }
+
+    result.audio_base64 = audioBase64;
 
     return NextResponse.json(result);
   } catch (err) {

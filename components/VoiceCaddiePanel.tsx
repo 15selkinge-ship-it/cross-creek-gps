@@ -59,6 +59,7 @@ interface CaddieResponse {
     putting: number | null;
   };
   inferred_shots?: InferredShot[];
+  audio_base64?: string | null;
 }
 
 interface HistoryEntry {
@@ -105,25 +106,15 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
   return (w["SpeechRecognition"] ?? w["webkitSpeechRecognition"] ?? null) as SpeechRecognitionConstructor | null;
 }
 
-// ── Helper: speak text via speechSynthesis ─────────────────────────────────
+// ── Helper: play TTS audio from base64 MP3 ────────────────────────────────
 
-function speak(text: string, muted: boolean) {
-  if (muted || typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate = 1.05;
-  utt.pitch = 1;
-  utt.volume = 1;
-  window.speechSynthesis.speak(utt);
-}
-
-function buildSpeechText(rec: CaddieRecommendation | null): string {
-  if (!rec) return "No recommendation available.";
-  const parts: string[] = [];
-  if (rec.club) parts.push(rec.club + ".");
-  if (rec.target) parts.push("Aim " + rec.target + ".");
-  if (rec.miss) parts.push("Miss " + rec.miss + ".");
-  return parts.join(" ") || "No recommendation available.";
+function playTTS(base64: string) {
+  try {
+    const audio = new Audio(`data:audio/mp3;base64,${base64}`);
+    audio.play().catch(err => console.warn("[tts] playback error:", err));
+  } catch (err) {
+    console.warn("[tts] audio creation error:", err);
+  }
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -150,7 +141,6 @@ export default function VoiceCaddiePanel({
   const [holeTranscripts, setHoleTranscripts] = useState<string[]>([]);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     setSpeechSupported(!!getSpeechRecognition());
@@ -204,13 +194,6 @@ export default function VoiceCaddiePanel({
     if (isRecording) {
       stopRecording();
     } else {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(" ");
-        utt.volume = 0;
-        window.speechSynthesis.speak(utt);
-        uttRef.current = new SpeechSynthesisUtterance("");
-      }
       startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
@@ -257,15 +240,9 @@ export default function VoiceCaddiePanel({
         const caddie = data as CaddieResponse;
         setCaddieResponse(caddie);
 
-        // Speak using pre-created utterance (maintains user gesture chain on Chrome Android)
-        if (!muted && uttRef.current && typeof window !== "undefined" && window.speechSynthesis) {
-          uttRef.current.text = buildSpeechText(caddie.caddie_recommendation);
-          uttRef.current.rate = 1.05;
-          uttRef.current.pitch = 1;
-          uttRef.current.volume = 1;
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(uttRef.current);
-          uttRef.current = null;
+        // Play TTS audio returned from server
+        if (!muted && caddie.audio_base64) {
+          playTTS(caddie.audio_base64);
         }
 
         // Auto-log hole from voice if hole_result with inferred shots
@@ -328,10 +305,7 @@ export default function VoiceCaddiePanel({
             AI Caddie
           </div>
           <button
-            onClick={() => {
-              setMuted(m => !m);
-              if (typeof window !== "undefined") window.speechSynthesis?.cancel();
-            }}
+            onClick={() => setMuted(m => !m)}
             title={muted ? "Unmute caddie voice" : "Mute caddie voice"}
             style={{
               height: 32, padding: "0 10px", borderRadius: 10,
