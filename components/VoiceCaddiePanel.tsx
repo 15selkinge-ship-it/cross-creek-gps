@@ -80,11 +80,13 @@ interface VoiceCaddiePanelProps {
 }
 
 // ── Helper: play TTS audio from base64 MP3 ────────────────────────────────
+// audioRef must be pre-created inside a user gesture to satisfy iOS autoplay policy.
+// We reuse the same element by setting .src so the unlock carries over.
 
-function playTTS(base64: string) {
+function playTTS(base64: string, audioEl: HTMLAudioElement) {
   try {
-    const audio = new Audio(`data:audio/mp3;base64,${base64}`);
-    audio.play().catch(err => console.warn("[tts] playback error:", err));
+    audioEl.src = `data:audio/mp3;base64,${base64}`;
+    audioEl.play().catch(err => console.warn("[tts] playback error:", err));
   } catch (err) {
     console.warn("[tts] audio creation error:", err);
   }
@@ -127,6 +129,7 @@ export default function VoiceCaddiePanel({
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setHoleTranscripts([]);
@@ -186,7 +189,9 @@ export default function VoiceCaddiePanel({
 
         // Play TTS audio returned from server
         if (!muted && caddie.audio_base64) {
-          playTTS(caddie.audio_base64);
+          const audioEl = audioRef.current ?? new Audio();
+          audioRef.current = audioEl;
+          playTTS(caddie.audio_base64, audioEl);
         }
 
         // Auto-log hole from voice if hole_result with inferred shots
@@ -229,10 +234,17 @@ export default function VoiceCaddiePanel({
       return;
     }
 
-    // Prime speechSynthesis within user gesture for iOS
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    // Unlock audio playback on iOS within this user gesture — must happen
+    // synchronously before any await, otherwise iOS drops the activation context.
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
     }
+    // A silent play/pause touch is enough to satisfy iOS autoplay policy
+    audioRef.current.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU2LjM2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU2LjQxAAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAAAAAA//MUZAAAAAGkAAAAAAAAA0gAAAAATEFN//MUZAMAAAGkAAAAAAAAA0gAAAAARTMu//MUZAYAAAGkAAAAAAAAA0gAAAAAOTku//MUZAkAAAGkAAAAAAAAA0gAAAAANVVV";
+    audioRef.current.volume = 0;
+    audioRef.current.play().catch(() => {});
+    audioRef.current.pause();
+    audioRef.current.volume = 1;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
