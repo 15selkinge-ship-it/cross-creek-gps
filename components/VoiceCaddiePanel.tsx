@@ -79,33 +79,6 @@ interface VoiceCaddiePanelProps {
   onHoleComplete?: (inferredShots: InferredShot[], holeScore: number) => void;
 }
 
-// ── Web Speech API — minimal local types (not in standard DOM lib) ─────────
-
-interface SRResultItem { transcript: string }
-interface SRResult { readonly length: number; [index: number]: SRResultItem }
-interface SRResultList { readonly length: number; [index: number]: SRResult }
-interface SREvent { results: SRResultList }
-interface SRErrorEvent { error: string }
-interface SpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((e: SREvent) => void) | null;
-  onerror: ((e: SRErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
-
-// ── Web Speech API detection ───────────────────────────────────────────────
-
-function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as Record<string, unknown>;
-  return (w["SpeechRecognition"] ?? w["webkitSpeechRecognition"] ?? null) as SpeechRecognitionConstructor | null;
-}
-
 // ── Helper: play TTS audio from base64 MP3 ────────────────────────────────
 
 function playTTS(base64: string) {
@@ -139,8 +112,8 @@ export default function VoiceCaddiePanel({
   gpsDistanceYards,
   onHoleComplete,
 }: VoiceCaddiePanelProps) {
-  const [speechSupported, setSpeechSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [textInput, setTextInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -152,11 +125,8 @@ export default function VoiceCaddiePanel({
   const [holeTranscripts, setHoleTranscripts] = useState<string[]>([]);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
 
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-
-  useEffect(() => {
-    setSpeechSupported(!!getSpeechRecognition());
-  }, []);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     setHoleTranscripts([]);
@@ -171,53 +141,6 @@ export default function VoiceCaddiePanel({
     }, 1800);
     return () => clearInterval(iv);
   }, [loading]);
-
-  const stopRecording = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setIsRecording(false);
-  }, []);
-
-  const startRecording = useCallback(() => {
-    const SR = getSpeechRecognition();
-    if (!SR) return;
-    setTranscript("");
-    setError(null);
-
-    const rec = new SR();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-
-    rec.onresult = (e: SREvent) => {
-      const parts: string[] = [];
-      for (let i = 0; i < e.results.length; i++) {
-        parts.push(e.results[i][0].transcript);
-      }
-      setTranscript(parts.join(" "));
-    };
-
-    rec.onerror = (e: SRErrorEvent) => {
-      setError(`Mic error: ${e.error}. Try the text input below.`);
-      setIsRecording(false);
-    };
-
-    rec.onend = () => {
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = rec;
-    rec.start();
-    setIsRecording(true);
-  }, []);
-
-  const handleToggleRecord = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  }, [isRecording, startRecording, stopRecording]);
 
   const submitToAI = useCallback(
     async (text: string) => {
@@ -299,16 +222,83 @@ export default function VoiceCaddiePanel({
     [currentHole, gpsDistanceYards, holeTranscripts, muted, onHoleComplete, par, roundEvents, sgTotal, strokesThisHole]
   );
 
-  // Auto-submit when recording stops and transcript is non-empty
-  const prevRecording = useRef(false);
-  useEffect(() => {
-    if (prevRecording.current && !isRecording && transcript.trim()) {
-      submitToAI(transcript);
+  const handleToggleRecord = useCallback(async () => {
+    if (isRecording) {
+      // Stop recording — MediaRecorder will fire ondataavailable then onstop
+      mediaRecorderRef.current?.stop();
+      return;
     }
-    prevRecording.current = isRecording;
-  }, [isRecording, transcript, submitToAI]);
+
+    // Prime speechSynthesis within user gesture for iOS
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        // Stop all tracks to release the microphone
+        stream.getTracks().forEach(t => t.stop());
+        setIsRecording(false);
+        setIsTranscribing(true);
+
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "audio.webm");
+
+          const res = await fetch("/api/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || data.error) {
+            setError(`Transcription failed: ${data.error ?? "unknown error"}. Try typing instead.`);
+            return;
+          }
+
+          const text = data.transcript?.trim();
+          if (text) {
+            setTranscript(text);
+            // Auto-submit to caddie
+            await submitToAI(text);
+          } else {
+            setError("Could not hear anything. Please try again or type below.");
+          }
+        } catch (err) {
+          console.error("[whisper] error:", err);
+          setError("Transcription failed. Try typing instead.");
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setTranscript("");
+      setError(null);
+    } catch (err) {
+      console.error("[mic] error:", err);
+      setError("Microphone access denied. Please allow microphone and try again.");
+    }
+  }, [isRecording, submitToAI]);
 
   const handleTextSubmit = () => submitToAI(textInput);
+
+  const isBusy = loading || isTranscribing;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -342,127 +332,82 @@ export default function VoiceCaddiePanel({
           </button>
         </div>
 
-        {speechSupported ? (
-          <>
-            <button
-              onClick={handleToggleRecord}
-              disabled={loading}
-              style={{
-                height: 64, width: "100%", borderRadius: 16, border: "none",
-                fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800,
-                fontSize: "1.2rem", letterSpacing: "0.1em", textTransform: "uppercase",
-                background: isRecording ? "#22c55e" : "var(--bg-elevated)",
-                color: isRecording ? "#052e16" : "var(--text-primary)",
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.7 : 1,
-                boxShadow: isRecording
-                  ? "0 0 0 4px rgba(34,197,94,0.2), 0 0 28px rgba(34,197,94,0.35)"
-                  : loading
-                  ? "0 0 0 3px rgba(34,197,94,0.15), 0 0 20px rgba(34,197,94,0.2)"
-                  : "none",
-                animation: isRecording
-                  ? "caddie-pulse 1.8s ease-in-out infinite"
-                  : loading
-                  ? "ball-glow-pulse 2.4s ease-in-out infinite"
-                  : "none",
-                transition: "background 0.2s, color 0.2s, box-shadow 0.2s",
-              }}
-            >
-              {isRecording ? "● RECORDING — TAP TO SEND" : loading ? "CADDIE THINKING…" : "TAP TO SPEAK"}
-            </button>
+        <button
+          onClick={handleToggleRecord}
+          disabled={isBusy && !isRecording}
+          style={{
+            height: 64, width: "100%", borderRadius: 16, border: "none",
+            fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800,
+            fontSize: "1.2rem", letterSpacing: "0.1em", textTransform: "uppercase",
+            background: isRecording ? "#22c55e" : isTranscribing ? "#1d4ed8" : "var(--bg-elevated)",
+            color: isRecording ? "#052e16" : isTranscribing ? "#e0e7ff" : "var(--text-primary)",
+            cursor: (isBusy && !isRecording) ? "not-allowed" : "pointer",
+            opacity: (isBusy && !isRecording) ? 0.7 : 1,
+            boxShadow: isRecording
+              ? "0 0 0 4px rgba(34,197,94,0.2), 0 0 28px rgba(34,197,94,0.35)"
+              : loading
+              ? "0 0 0 3px rgba(34,197,94,0.15), 0 0 20px rgba(34,197,94,0.2)"
+              : "none",
+            animation: isRecording
+              ? "caddie-pulse 1.8s ease-in-out infinite"
+              : loading
+              ? "ball-glow-pulse 2.4s ease-in-out infinite"
+              : "none",
+            transition: "background 0.2s, color 0.2s, box-shadow 0.2s",
+          }}
+        >
+          {isRecording ? "● RECORDING — TAP TO STOP" : isTranscribing ? "TRANSCRIBING…" : isBusy ? "CADDIE THINKING…" : "TAP TO SPEAK"}
+        </button>
 
-            {holeTranscripts.length > 0 && (
-              <div style={{ marginTop: 6, fontSize: "0.72rem", color: "#86efac", opacity: 0.7, textAlign: "center" }}>
-                {holeTranscripts.length} update{holeTranscripts.length > 1 ? "s" : ""} this hole
-              </div>
-            )}
-
-            {(isRecording || transcript) && (
-              <div style={{
-                marginTop: 10, padding: "10px 14px",
-                background: "var(--bg-elevated)", borderRadius: 12,
-                border: `1px solid ${isRecording ? "#22c55e40" : "var(--border)"}`,
-                color: isRecording ? "#86efac" : "var(--text-primary)",
-                fontSize: "0.9rem", minHeight: 44, lineHeight: 1.45,
-                transition: "border-color 0.2s",
-              }}>
-                {transcript || <span style={{ opacity: 0.4 }}>Listening...</span>}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ color: "#fde68a", fontSize: "0.8rem", marginBottom: 8 }}>
-            Voice input not supported in this browser. Use text below.
+        {holeTranscripts.length > 0 && (
+          <div style={{ marginTop: 6, fontSize: "0.72rem", color: "#86efac", opacity: 0.7, textAlign: "center" }}>
+            {holeTranscripts.length} update{holeTranscripts.length > 1 ? "s" : ""} this hole
           </div>
         )}
 
-        {/* Text fallback — always shown on non-speech browsers, optional on others */}
-        {(!speechSupported) && (
-          <div style={{ display: "flex", gap: 8, marginTop: speechSupported ? 10 : 0 }}>
-            <input
-              type="text"
-              value={textInput}
-              onChange={e => setTextInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleTextSubmit()}
-              placeholder="Describe your shot or situation..."
-              disabled={loading}
-              style={{
-                flex: 1, padding: "12px 14px", borderRadius: 12,
-                border: "1px solid var(--border)", background: "var(--bg-elevated)",
-                color: "var(--text-primary)", fontSize: "1rem", outline: "none",
-                fontFamily: "Barlow, sans-serif",
-              }}
-            />
-            <button
-              onClick={handleTextSubmit}
-              disabled={loading || !textInput.trim()}
-              style={{
-                padding: "0 16px", borderRadius: 12, border: "none",
-                background: textInput.trim() && !loading ? "#22c55e" : "#1a2a1e",
-                color: textInput.trim() && !loading ? "#052e16" : "#1f3d28",
-                fontFamily: "'Barlow Condensed',sans-serif",
-                fontWeight: 700, fontSize: "0.9rem", cursor: "pointer",
-                transition: "background 0.2s, color 0.2s",
-              }}
-            >
-              {loading ? "..." : "SEND"}
-            </button>
+        {transcript && !isRecording && (
+          <div style={{
+            marginTop: 10, padding: "10px 14px",
+            background: "var(--bg-elevated)", borderRadius: 12,
+            border: "1px solid var(--border)",
+            color: "var(--text-primary)",
+            fontSize: "0.9rem", lineHeight: 1.45,
+          }}>
+            {transcript}
           </div>
         )}
 
-        {/* Also show text input below Record button as optional typed override */}
-        {speechSupported && (
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <input
-              type="text"
-              value={textInput}
-              onChange={e => setTextInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleTextSubmit()}
-              placeholder="Or type here..."
-              disabled={loading || isRecording}
-              style={{
-                flex: 1, padding: "10px 14px", borderRadius: 12,
-                border: "1px solid var(--border)", background: "var(--bg-elevated)",
-                color: "var(--text-primary)", fontSize: "0.95rem", outline: "none",
-                fontFamily: "Barlow, sans-serif", opacity: isRecording ? 0.4 : 1,
-              }}
-            />
-            <button
-              onClick={handleTextSubmit}
-              disabled={loading || isRecording || !textInput.trim()}
-              style={{
-                padding: "0 14px", borderRadius: 12, border: "none",
-                background: textInput.trim() && !loading && !isRecording ? "#22c55e" : "#1a2a1e",
-                color: textInput.trim() && !loading && !isRecording ? "#052e16" : "#1f3d28",
-                fontFamily: "'Barlow Condensed',sans-serif",
-                fontWeight: 700, fontSize: "0.85rem", cursor: "pointer",
-                transition: "background 0.2s, color 0.2s",
-              }}
-            >
-              {loading ? "..." : "SEND"}
-            </button>
-          </div>
-        )}
+        {/* Text input — always shown */}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <input
+            type="text"
+            value={textInput}
+            onChange={e => setTextInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleTextSubmit()}
+            placeholder="Or type here..."
+            disabled={isBusy || isRecording}
+            style={{
+              flex: 1, padding: "10px 14px", borderRadius: 12,
+              border: "1px solid var(--border)", background: "var(--bg-elevated)",
+              color: "var(--text-primary)", fontSize: "0.95rem", outline: "none",
+              fontFamily: "Barlow, sans-serif", opacity: (isBusy || isRecording) ? 0.4 : 1,
+            }}
+          />
+          <button
+            onClick={handleTextSubmit}
+            disabled={isBusy || isRecording || !textInput.trim()}
+            style={{
+              padding: "0 14px", borderRadius: 12, border: "none",
+              background: textInput.trim() && !isBusy && !isRecording ? "#22c55e" : "#1a2a1e",
+              color: textInput.trim() && !isBusy && !isRecording ? "#052e16" : "#1f3d28",
+              fontFamily: "'Barlow Condensed',sans-serif",
+              fontWeight: 700, fontSize: "0.85rem", cursor: "pointer",
+              transition: "background 0.2s, color 0.2s",
+            }}
+          >
+            {isBusy ? "..." : "SEND"}
+          </button>
+        </div>
 
         {error && (
           <div style={{ marginTop: 10, padding: "10px 14px", background: "#1c0a0a", border: "1px solid #7f1d1d", borderRadius: 12, color: "#fca5a5", fontSize: "0.83rem" }}>
@@ -472,7 +417,7 @@ export default function VoiceCaddiePanel({
       </div>
 
       {/* ── Loading Animation Card ── */}
-      {loading && (
+      {isBusy && (
         <div style={{
           background: "var(--bg-card)",
           border: "1px solid #22c55e30",
@@ -553,7 +498,7 @@ export default function VoiceCaddiePanel({
       )}
 
       {/* ── Caddie Recommendation Card ── */}
-      {!loading && rec && (
+      {!isBusy && rec && (
         <div style={{ background: "var(--bg-card)", border: "1px solid #22c55e30", borderRadius: 16, padding: 16, animation: "caddie-fade 0.3s ease-out" }}>
           <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#22c55e", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
             Caddie Advice
@@ -587,7 +532,7 @@ export default function VoiceCaddiePanel({
       )}
 
       {/* ── Pattern Insight Card ── */}
-      {!loading && insight?.present && insight.message && (
+      {!isBusy && insight?.present && insight.message && (
         <div style={{
           background: "#1c1400",
           border: "1px solid #f59e0b60",
@@ -609,7 +554,7 @@ export default function VoiceCaddiePanel({
       )}
 
       {/* ── Round Update Card ── */}
-      {!loading && roundUpdate && Object.values(roundUpdate).some(v => v !== null) && (
+      {!isBusy && roundUpdate && Object.values(roundUpdate).some(v => v !== null) && (
         <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 16, padding: 16, animation: "caddie-fade 0.4s ease-out" }}>
           <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "var(--text-secondary)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>
             Round Update
