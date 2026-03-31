@@ -117,6 +117,17 @@ function playTTS(base64: string) {
   }
 }
 
+// ── Loading messages ───────────────────────────────────────────────────────
+
+const LOADING_MESSAGES = [
+  "Reading the lie…",
+  "Checking the wind…",
+  "Picking your club…",
+  "Lining up the shot…",
+  "Consulting the yardage book…",
+  "Reading the green…",
+];
+
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function VoiceCaddiePanel({
@@ -139,6 +150,7 @@ export default function VoiceCaddiePanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const [holeTranscripts, setHoleTranscripts] = useState<string[]>([]);
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
@@ -150,6 +162,15 @@ export default function VoiceCaddiePanel({
     setHoleTranscripts([]);
     setCaddieResponse(null);
   }, [currentHole]);
+
+  useEffect(() => {
+    if (!loading) return;
+    setLoadingMsgIdx(0);
+    const iv = setInterval(() => {
+      setLoadingMsgIdx(i => (i + 1) % LOADING_MESSAGES.length);
+    }, 1800);
+    return () => clearInterval(iv);
+  }, [loading]);
 
   const stopRecording = useCallback(() => {
     recognitionRef.current?.stop();
@@ -333,15 +354,21 @@ export default function VoiceCaddiePanel({
                 background: isRecording ? "#22c55e" : "var(--bg-elevated)",
                 color: isRecording ? "#052e16" : "var(--text-primary)",
                 cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.5 : 1,
+                opacity: loading ? 0.7 : 1,
                 boxShadow: isRecording
                   ? "0 0 0 4px rgba(34,197,94,0.2), 0 0 28px rgba(34,197,94,0.35)"
+                  : loading
+                  ? "0 0 0 3px rgba(34,197,94,0.15), 0 0 20px rgba(34,197,94,0.2)"
                   : "none",
-                animation: isRecording ? "caddie-pulse 1.8s ease-in-out infinite" : "none",
+                animation: isRecording
+                  ? "caddie-pulse 1.8s ease-in-out infinite"
+                  : loading
+                  ? "ball-glow-pulse 2.4s ease-in-out infinite"
+                  : "none",
                 transition: "background 0.2s, color 0.2s, box-shadow 0.2s",
               }}
             >
-              {isRecording ? "● RECORDING — TAP TO SEND" : loading ? "THINKING..." : "TAP TO SPEAK"}
+              {isRecording ? "● RECORDING — TAP TO SEND" : loading ? "CADDIE THINKING…" : "TAP TO SPEAK"}
             </button>
 
             {holeTranscripts.length > 0 && (
@@ -444,8 +471,89 @@ export default function VoiceCaddiePanel({
         )}
       </div>
 
+      {/* ── Loading Animation Card ── */}
+      {loading && (
+        <div style={{
+          background: "var(--bg-card)",
+          border: "1px solid #22c55e30",
+          borderRadius: 16,
+          padding: "20px 16px",
+          animation: "caddie-fade 0.2s ease-out",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12,
+        }}>
+          {/* Golf ball arc SVG */}
+          <svg
+            viewBox="0 0 200 60"
+            width="100%"
+            height={60}
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ display: "block", overflow: "visible" }}
+          >
+            <defs>
+              <filter id="ball-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {/* Flight path arc — faint */}
+            <path
+              id="ball-arc"
+              d="M10,50 C55,50 55,10 100,10 C145,10 145,50 190,50"
+              fill="none"
+              stroke="#22c55e"
+              strokeOpacity={0.15}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+
+            {/* Golf ball travelling the arc */}
+            <circle r={6} fill="#22c55e" filter="url(#ball-glow)">
+              <animateMotion dur="1.6s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#ball-arc" />
+              </animateMotion>
+            </circle>
+          </svg>
+
+          {/* Cycling status message */}
+          <div
+            key={loadingMsgIdx}
+            style={{
+              fontFamily: "'Barlow Condensed',sans-serif",
+              fontWeight: 700,
+              fontSize: "1rem",
+              color: "#86efac",
+              letterSpacing: "0.04em",
+              textAlign: "center",
+              animation: "msg-fade 1.8s ease-in-out",
+            }}
+          >
+            {LOADING_MESSAGES[loadingMsgIdx]}
+          </div>
+
+          {/* Sub-label */}
+          <div style={{
+            fontFamily: "'Barlow Condensed',sans-serif",
+            fontWeight: 600,
+            fontSize: "0.65rem",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "#4ade80",
+            opacity: 0.5,
+          }}>
+            AI Caddie is thinking
+          </div>
+        </div>
+      )}
+
       {/* ── Caddie Recommendation Card ── */}
-      {rec && (
+      {!loading && rec && (
         <div style={{ background: "var(--bg-card)", border: "1px solid #22c55e30", borderRadius: 16, padding: 16, animation: "caddie-fade 0.3s ease-out" }}>
           <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#22c55e", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
             Caddie Advice
@@ -479,7 +587,7 @@ export default function VoiceCaddiePanel({
       )}
 
       {/* ── Pattern Insight Card ── */}
-      {insight?.present && insight.message && (
+      {!loading && insight?.present && insight.message && (
         <div style={{
           background: "#1c1400",
           border: "1px solid #f59e0b60",
@@ -501,7 +609,7 @@ export default function VoiceCaddiePanel({
       )}
 
       {/* ── Round Update Card ── */}
-      {roundUpdate && Object.values(roundUpdate).some(v => v !== null) && (
+      {!loading && roundUpdate && Object.values(roundUpdate).some(v => v !== null) && (
         <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 16, padding: 16, animation: "caddie-fade 0.4s ease-out" }}>
           <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "var(--text-secondary)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>
             Round Update
@@ -578,6 +686,16 @@ export default function VoiceCaddiePanel({
         @keyframes caddie-fade {
           from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ball-glow-pulse {
+          0%, 100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.15), 0 0 20px rgba(34,197,94,0.2); }
+          50%       { box-shadow: 0 0 0 6px rgba(34,197,94,0.08), 0 0 35px rgba(34,197,94,0.35); }
+        }
+        @keyframes msg-fade {
+          0%   { opacity: 0; transform: translateY(4px); }
+          15%  { opacity: 1; transform: translateY(0); }
+          85%  { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-4px); }
         }
       `}</style>
     </div>
