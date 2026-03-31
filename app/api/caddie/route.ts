@@ -89,6 +89,7 @@ interface CaddieResponse {
     putting: number | null;
   };
   inferred_shots?: InferredShot[];
+  verbal_summary?: string | null;
   audio_base64?: string | null;
 }
 
@@ -135,30 +136,36 @@ Use transcript_type "hole_result" ONLY when:
 - When in doubt, do NOT use hole_result — use shot_result instead
 - NEVER use hole_result for a pre-shot description like "going to lay up" or "thinking about hitting driver"
 
+PUTT TENSE RULE — critical:
+- Past tense ONLY triggers hole_result: "putted", "two putted", "made the putt", "missed it", "tapped in", "holed out", "3 putt", "lipped out", "got up and down", "two putt par", "three putt bogey"
+- Present or future putt language is ALWAYS shot_context: "on the green", "looking at a two putt", "going to putt", "need to two putt", "have a birdie putt", "30 footer for par", "I'm putting"
+- The key test: has the putt already been STRUCK AND COMPLETED? If not, it is shot_context, never hole_result.
+
 Also use hole_result when:
-- The player states putts taken, even without an explicit score word
+- The player states putts taken in past tense (putts already completed), even without an explicit score word
 - Examples that should ALL trigger hole_result:
-  - "2 putt"
-  - "two putt"
+  - "2 putt" (past — just finished)
+  - "two putted"
   - "three putt"
   - "putted from 20 feet, 2 putt"
   - "made the putt"
   - "missed the putt, 3 putt"
   - "tapped in"
   - "holed it from off the green"
-- Putting is always the final act of a hole — if the player describes putts taken, the hole is complete
-- When hole_result is triggered by a putt statement and no explicit total score is given, infer hole_score as: strokesThisHole (provided in context) + putts taken
+- Putting is always the final act of a hole — if the player describes putts ALREADY TAKEN, the hole is complete
+- When hole_result is triggered by a putt statement and no explicit total score is given, infer hole_score from the full shot reconstruction
 - Use the priorTranscripts to reconstruct all shots that happened before the putting
 
-If you are unsure whether something is shot_result or hole_result, ask: does this statement describe the final act of completing the hole? Putting always does. A chip or approach shot does not unless the player says they holed it.
+If you are unsure whether something is shot_result or hole_result, ask: has the putt already been struck and completed? If not, use shot_context. If yes, use hole_result.
 
-STROKE COUNTING FOR hole_result:
-When reconstructing inferred_shots, count strokes carefully using ALL available information in this order:
-1. strokesThisHole in context = strokes already confirmed from GPS shot logging (may be 0 if player used voice only)
-2. priorTranscripts = shot descriptions from earlier this hole that were NOT GPS logged
-3. The current transcript = the final update (often a putt count)
-
-Count one stroke per shot described in priorTranscripts plus the current update. Do not assume the tee shot is the only prior stroke. If priorTranscripts contains "chipping from 20 yards" that is one stroke. If the current transcript is "2 putt" that is 2 more strokes. Add them all up.
+GPS VS VOICE RECONCILIATION — read carefully:
+- strokesThisHole = shots already GPS-button-logged by the player (may be 0 for voice-only rounds)
+- priorTranscripts = ALL voice updates this hole, regardless of whether GPS was also used
+- DO NOT add strokesThisHole to the count of priorTranscripts — they may describe the same shots
+- Use priorTranscripts as the primary source of truth for shot sequence
+- If strokesThisHole > count of shots described in priorTranscripts, add anonymous tee shot entries to fill the gap
+- ALWAYS verify: sum of all inferred_shots stroke_value fields equals hole_score before returning
+- If they do not match, recount and correct before responding
 
 Example — par 4, priorTranscripts has "missed green, chipping from 20 yards", current transcript is "2 putt":
 - Shot 1: tee (driver, tee to fairway)
@@ -168,9 +175,7 @@ Example — par 4, priorTranscripts has "missed green, chipping from 20 yards", 
 - Total: 5 strokes = bogey on par 4
 - Do NOT return birdie. Do NOT assume only 2 shots before the putts.
 
-When in doubt about how many full shots happened before putting, count each distinct shot description in priorTranscripts as one stroke, plus the tee shot, plus putts.
-
-hole_score should equal the total count of inferred_shots stroke_value fields added together. Verify this before returning.
+hole_score should equal the total count of inferred_shots. Verify this before returning.
 
 Use transcript_type "round_context" when:
 - The player describes match play, handicap strokes, or overall round situation
@@ -179,18 +184,20 @@ Use transcript_type "round_context" when:
 Use transcript_type "match_context" when:
 - The player describes the current match state mid-round
 
-CADDIE ADVICE RULES:
-- For shot_context: always return a caddie_recommendation with club, target, miss, strategy_mode
-- For shot_result: give brief advice on next shot if useful, otherwise null
-- For hole_result: caddie_recommendation can be null
-- Be concise and specific — one club, one target, one miss direction
-- Analyze roundEvents for miss patterns and surface one insight when data supports it
+CADDIE RECOMMENDATION RULES:
+- For shot_context: ALWAYS return club, target, miss, strategy_mode — no exceptions
+- For shot_result: ALWAYS return caddie_recommendation unless the player has explicitly holed out or the hole is clearly over. After a bad shot (bunker, penalty, missed green) the player needs advice MORE not less — always give the next shot recommendation
+- For hole_result: caddie_recommendation MAY be null — use verbal_summary instead (see below)
+- Never return a generic "aim for the center" — use the lie, distance, and course notes to be specific
+
+VERBAL SUMMARY RULE:
+For hole_result, always populate verbal_summary with a 1-2 sentence spoken summary of the hole result. Examples: "Bogey five. Solid approach but the three-putt hurt." or "Par four, great scramble from the rough." or "Birdie! That's how you play it." For all other transcript_type values, set verbal_summary to null.
 
 TONE AND STYLE:
 - Speak like a real caddie — brief, confident, direct
 - Use natural phrasing not robotic labels: say "take dead aim at the center" not "target: center of green"
 - For the club recommendation, just name the club simply: "Seven iron" not "7 iron"
-- For miss direction, phrase it naturally: "anything left is fine, stay away from the right bunker" — but ONLY mention bunkers if the player told you they exist
+- For miss direction, phrase it naturally: "anything left is fine, stay away from the right bunker" — but ONLY mention bunkers if the course notes or player told you they exist
 - Keep recommendations to 2-3 sentences maximum when spoken aloud
 - If pattern insight is present, lead with it conversationally: "You've been pulling your irons left today, aim a touch right of your normal line"
 
@@ -234,7 +241,8 @@ JSON response shape — always return all fields:
     "around_green": null,
     "putting": null
   },
-  "inferred_shots": []
+  "inferred_shots": [],
+  "verbal_summary": null
 }
 
 When pattern_insight.present is false, set message and category to null.
@@ -255,11 +263,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<CaddieRespons
 
   const { transcript, priorTranscripts, gpsDistanceYards, currentHole, par, strokesThisHole, sgTotal, roundEvents, holeNumber } = body;
 
+  console.log("[caddie] request:", JSON.stringify({ transcript, priorTranscripts, strokesThisHole, currentHole }));
+
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return NextResponse.json({ error: "transcript is required" }, { status: 400 });
   }
 
-  const holeFeatures = holeNumber ? await loadHoleFeatures(holeNumber) : "";
+  const holeFeatures = (holeNumber ?? currentHole) ? await loadHoleFeatures(holeNumber ?? currentHole ?? 1) : "";
 
   const priorContext = (priorTranscripts && priorTranscripts.length > 0)
     ? `\nPrior updates this hole:\n${priorTranscripts.map((t, i) => `  ${i + 1}. "${t}"`).join("\n")}`
@@ -273,7 +283,7 @@ Current situation:
 - GPS distance to pin: ${gpsDistanceYards != null ? `${gpsDistanceYards} yards` : "unavailable"}
 - Strokes this hole: ${strokesThisHole ?? 0}
 - Round strokes gained total: ${sgTotal ?? 0}
-  ${holeFeatures ? `\nCross Creek Biggs-Kreigh Hole ${holeNumber} — Course Notes:\n${holeFeatures}\n` : ""}${priorContext}
+  ${holeFeatures ? `\nCross Creek Biggs-Kreigh Hole ${holeNumber ?? currentHole} — Course Notes:\n${holeFeatures}\n` : ""}${priorContext}
   Latest update: "${transcript.trim()}"
 
 Full round events (for pattern analysis):
@@ -298,7 +308,7 @@ Return JSON only.`.trim();
           { role: "user", content: userMessage },
         ],
         temperature: 0.3,
-        max_tokens: 1200,
+        max_tokens: 2000,
         response_format: { type: "json_object" },
       }),
     });
@@ -338,10 +348,13 @@ Return JSON only.`.trim();
         putting: null,
       },
       inferred_shots: parsed.inferred_shots ?? [],
+      verbal_summary: parsed.verbal_summary ?? null,
     };
 
     // Build TTS text and generate audio server-side
     function buildTTSText(res: CaddieResponse): string {
+      // For hole_result use verbal_summary
+      if (res.verbal_summary) return res.verbal_summary;
       const rec = res.caddie_recommendation;
       const insight = res.pattern_insight;
       const parts: string[] = [];
@@ -384,6 +397,8 @@ Return JSON only.`.trim();
     }
 
     result.audio_base64 = audioBase64;
+
+    console.log("[caddie] response type:", result.transcript_type, "hole_score:", result.round_update?.hole_score, "inferred_shots:", result.inferred_shots?.length ?? 0);
 
     return NextResponse.json(result);
   } catch (err) {
