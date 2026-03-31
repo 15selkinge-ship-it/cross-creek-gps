@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 30;
 
+async function loadHoleFeatures(holeNumber: number): Promise<string> {
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const filePath = path.join(process.cwd(), "public", "course-features.json");
+    const raw = await fs.readFile(filePath, "utf-8");
+    const data = JSON.parse(raw);
+    const hole = data.holes[String(holeNumber)];
+    if (!hole) return "";
+
+    const lines = [
+      `Hole ${holeNumber} — Par ${hole.par}, ${hole.yards_blue} yards, Handicap ${hole.handicap}`,
+      `Shape: ${hole.shape?.replace("_", " ") ?? "straight"}`,
+      `Description: ${hole.description}`,
+      `Tee shot: ${hole.tee_shot}`,
+      `Hazards: ${hole.hazards?.join(", ") ?? "none"}`,
+      `Green: ${hole.green}`,
+      `Strategy: ${hole.strategy}`,
+      hole.lay_up_target ? `Lay-up target: ${hole.lay_up_target}` : null,
+      `Miss: ${hole.miss}`,
+    ].filter(Boolean);
+
+    return lines.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 interface CaddieRequest {
   transcript: string;
   priorTranscripts?: string[];
@@ -72,7 +100,7 @@ interface ErrorResponse {
 const SYSTEM_PROMPT = `You are a concise, experienced golf caddie and stat tracker.
 
 CRITICAL — COURSE KNOWLEDGE RULE:
-You have NO knowledge of this golf course's layout, hazards, bunkers, water, or green slopes. Do not invent or assume any course features. Never say things like "avoid the bunker left" or "water short" or "the green slopes right to left" unless the player explicitly tells you these things in their transcript. If you don't know the hole layout, give generic directional advice only (e.g. "aim center of green", "miss short rather than long"). When the player describes a hazard or feature, you may reference it in your recommendation for that hole only.
+You have detailed course notes for each hole at Cross Creek Biggs-Kreigh which are provided in the user message. Use these notes to give specific, accurate caddie advice — referencing actual hazards, green slopes, and strategy for this specific hole. Do not invent additional hazards or features beyond what is in the course notes. If course notes are not provided for a hole, give generic directional advice only.
 
 DISTANCE INTERPRETATION RULE:
 Any distance the player states is always distance remaining to the pin, unless they explicitly say otherwise.
@@ -225,11 +253,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<CaddieRespons
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { transcript, priorTranscripts, gpsDistanceYards, currentHole, par, strokesThisHole, sgTotal, roundEvents } = body;
+  const { transcript, priorTranscripts, gpsDistanceYards, currentHole, par, strokesThisHole, sgTotal, roundEvents, holeNumber } = body;
 
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return NextResponse.json({ error: "transcript is required" }, { status: 400 });
   }
+
+  const holeFeatures = holeNumber ? await loadHoleFeatures(holeNumber) : "";
 
   const priorContext = (priorTranscripts && priorTranscripts.length > 0)
     ? `\nPrior updates this hole:\n${priorTranscripts.map((t, i) => `  ${i + 1}. "${t}"`).join("\n")}`
@@ -237,13 +267,14 @@ export async function POST(req: NextRequest): Promise<NextResponse<CaddieRespons
 
   const userMessage = `
 Current situation:
+
 - Hole: ${currentHole ?? "unknown"}
 - Par: ${par ?? "unknown"}
 - GPS distance to pin: ${gpsDistanceYards != null ? `${gpsDistanceYards} yards` : "unavailable"}
 - Strokes this hole: ${strokesThisHole ?? 0}
 - Round strokes gained total: ${sgTotal ?? 0}
-${priorContext}
-Latest update: "${transcript.trim()}"
+  ${holeFeatures ? `\nCross Creek Biggs-Kreigh Hole ${holeNumber} — Course Notes:\n${holeFeatures}\n` : ""}${priorContext}
+  Latest update: "${transcript.trim()}"
 
 Full round events (for pattern analysis):
 ${JSON.stringify(roundEvents ?? [], null, 0)}
